@@ -94,8 +94,20 @@ sites/companyA/
 ```
 
 グループ名はURLに含まれない（フラット名前空間）。
-複数グループに同名のサブディレクトリがある場合は、先に登録されたグループが優先される。
 管理UIでグループの優先順位（順序）を変更できる。
+
+#### スラグ衝突の扱い
+
+**明示登録スラグ**: 既存スラグと重複する場合、登録時にエラーとして弾く。
+
+**サブディレクトリ（自動検出）**: 複数グループに同名のサブディレクトリがある場合、先に登録されたグループが優先される。
+管理UIの上部に衝突の警告を常時表示し、どのスラグがどのグループに解決されるかを明示する。
+
+```
+⚠ スラグ衝突:
+  app/ → companyA（優先） / companyB（無効）
+  blog/ → companyA（優先） / personal（無効）
+```
 
 #### DocumentRoot の自動検出
 
@@ -179,7 +191,7 @@ localhost:8000 → api.{base-domain}
 | mod_ssl | HTTPS 対応 |
 | mkcert + ローカルCA | SSL 証明書発行 |
 
-**表示例:**
+**表示例（有効化コマンドは OS を検出して出し分ける）:**
 
 ```
 環境チェック:
@@ -193,6 +205,8 @@ localhost:8000 → api.{base-domain}
   ⚠ mkcert 未インストール  ← brew install mkcert && mkcert -install
 ```
 
+※ モジュール有効化コマンドは OS により異なる（Debian/Ubuntu: `a2enmod`、macOS/Homebrew: `httpd.conf` の `LoadModule` 行を有効化）。
+
 管理UI：
 
 ```
@@ -202,6 +216,16 @@ http://127.0.0.1
 
 管理UIは localhost / 127.0.0.1 でのみアクセス可能。
 詳細は「10. セキュリティ」を参照。
+
+管理UIは単一の HTML ページで構成し、機能切替はページ内のタブ等で行う（クライアントサイドルーティング不使用）。
+これにより Apache の静的ファイル配信のみで動作し、SPA フォールバック設定は不要である。
+また、ページ遷移がないため一度読み込めば Node がクラッシュしても画面全体が表示されたまま復旧手順を提示できる。
+
+管理UIの上部には、以下の警告・エラーを常時表示する:
+
+* スラグ衝突（サブディレクトリの重複）が存在する場合（セクション4.1参照）
+* routes.json のパース失敗によりバックアップから復元した場合
+* routes.json とバックアップの両方が失敗し、空の初期状態で起動した場合
 
 ---
 
@@ -381,7 +405,7 @@ Apache の `prg:` タイプは「stdin で問い合わせ、stdout で応答」�
 | **stdout 汚染 = プロトコル破壊** | ルーティング応答以外の出力が stdout に混入すると、Apache がそれをルーティング先として解釈する | メインスレッドは `console.log` 禁止。Worker Thread は `{ stdout: true }` で stdout を分離し、stderr に転送 | 5.1 スレッド分離、6.4 Worker 起動 |
 | **クラッシュ時に管理UIが全滅** | Node が死ぬとユーザは状況を把握できず復旧方法もわからない | 管理UIフロントエンド（静的ファイル）を Apache が直接配信。Node 停止時も管理画面は表示され、JS が API エラーを検出して復旧手順を表示する | 5.1 構成、6.5 ルール 1a/1b |
 | **クラッシュ時に自動再起動しない** | `prg:` プロセスが死ぬと Apache は壊れたパイプに書き込み続け、全リクエストがハングする | メインスレッドは最小限のコード + try-catch で絶対に落とさない設計。Worker がクラッシュしてもメインは影響を受けない | 5.1 スレッド分離の理由 |
-| **mutex によるシリアライズ** | 同時リクエストは直列処理される | ローカル開発用途では問題なし。resolve 関数は軽量に保つ | — |
+| **mutex によるシリアライズ** | 同時リクエストは直列処理される。resolve 内の `fs.existsSync` も同期 I/O であり、グループ数×2回のディスクアクセスが全リクエストのレイテンシに直結する | ローカル開発用途かつ OS のファイルシステムキャッシュにより実測上は問題なし。resolve 関数は軽量に保つ。将来必要であればサブディレクトリ一覧のキャッシュ + `fs.watch` による変更検出で最適化可能 | 6.4 resolve 関数 |
 | **インスタンスは1つのみ** | 水平スケール不可 | 同上 | — |
 
 > **設計上の注意**: 上記の制約は `prg:` アーキテクチャに固有のものであり、本設計で既に対策されている。
@@ -432,9 +456,19 @@ stdin EOF だけではプロセスが終了しない。明示的な `worker.term
 2. Worker が `parentPort.postMessage()` でメインスレッドに新しい状態を送信
 3. メインスレッドが `state = msg.state` でインメモリ状態を即時更新
 
+Worker は起動時にも routes.json を読み込み、メインスレッドに通知する。
+これにより Worker クラッシュ→再起動時にメインスレッドの状態が最新の routes.json と同期される。
+
 ```javascript
 // Worker 側（admin.js）
+
+// 起動時にメインスレッドと状態を同期（クラッシュ→再起動時の不整合を防止）
+const currentState = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
+parentPort.postMessage({ type: 'routes-updated', state: currentState });
+
 function updateRoutes(newState) {
+  // バックアップ作成（フォールバック用）
+  try { fs.copyFileSync(routesPath, routesPath + '.bak'); } catch (e) {}
   // アトミック書き込み（書き込み中のクラッシュによる JSON 破損を防止）
   const tmp = routesPath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(newState, null, 2));
@@ -534,7 +568,19 @@ const ROUTES_PATH = path.join(__dirname, '../data/routes.json');
 const SOCKET_PATH = path.join(__dirname, '../run/admin.sock');
 
 // 1. 起動時に routes.json を同期読み込み（stdin 応答前に完了させる）
-let state = JSON.parse(fs.readFileSync(ROUTES_PATH, 'utf8'));
+//    パース失敗時はバックアップを試行、それも失敗なら空の初期状態で起動（管理UIにエラー表示）
+let state;
+try {
+  state = JSON.parse(fs.readFileSync(ROUTES_PATH, 'utf8'));
+} catch {
+  try {
+    state = JSON.parse(fs.readFileSync(ROUTES_PATH + '.bak', 'utf8'));
+    process.stderr.write('routes.json broken, loaded from backup\n');
+  } catch {
+    state = { baseDomains: [], groups: [], routes: [] };
+    process.stderr.write('routes.json and backup both broken, starting empty\n');
+  }
+}
 
 // 2. Worker 起動（Admin UI）
 let restartCount = 0;
@@ -556,6 +602,7 @@ function spawnWorker() {
 
   w.on('message', (msg) => {
     if (msg.type === 'routes-updated') state = msg.state;
+    restartCount = 0;  // 正常稼働確認でリセット（連続クラッシュループのみ防止）
   });
 
   w.on('error', (err) => {
@@ -641,6 +688,30 @@ function resolve(hostname, state) {
 登録済みベースドメインをラベル数の降順でソートし、長い方から順にマッチングする。
 サブドメインは1階層のみ（単一ラベル）を受け付ける。2階層以上は NULL を返す。
 
+```javascript
+function parseHostname(hostname, baseDomains) {
+  // ベースドメインをラベル数の降順でソート（長い方から照合）
+  const sorted = baseDomains
+    .map(bd => bd.domain)
+    .sort((a, b) => b.split('.').length - a.split('.').length);
+
+  for (const base of sorted) {
+    if (hostname === base) {
+      return { base, slug: null, isBare: true };
+    }
+    if (hostname.endsWith('.' + base)) {
+      const sub = hostname.slice(0, -(base.length + 1));
+      // サブドメインは単一ラベルのみ許可
+      if (sub.includes('.')) return null;  // 2階層以上 → NULL
+      return { base, slug: sub, isBare: false };
+    }
+  }
+  return null;  // どのベースドメインにもマッチしない
+}
+```
+
+マッチング例:
+
 ```
 入力: app.127.0.0.1.nip.io
 
@@ -663,8 +734,10 @@ function resolve(hostname, state) {
 Apache 側のルールは Node に問い合わせて返り値で分岐するだけのシンプルな構成となる。
 
 ```apache
+# ※ RewriteMap はサーバコンフィグレベルで定義（セクション8参照）
+DirectoryIndex index.php index.html index.htm
+ProxyPreserveHost On
 RewriteEngine On
-RewriteMap router "prg:/usr/local/bin/node /router/app/router.js"
 
 # 1a. 管理API（Node Worker Thread へプロキシ）
 RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$
@@ -869,7 +942,7 @@ mod_proxy_wstunnel による ws トンネルを有効化する。
 プロトコルを `ws://` に変換してプロキシする。
 
 ```apache
-# 6.5 ルール 4（再掲）
+# 6.5 ルール 5（再掲）
 RewriteCond %{HTTP:Upgrade} =websocket [NC]
 RewriteCond %{ENV:ROUTE} ^https?://(.+)
 RewriteRule ^(.*)$ ws://%1$1 [P,L]
@@ -947,6 +1020,41 @@ SSL が有効なベースドメインが複数ある場合は、全ワイルド�
 mkcert はローカル CA の署名のみのためミリ秒オーダーで完了する。
 証明書ファイルパスを固定（`{ROUTER_HOME}/ssl/cert.pem`, `key.pem`）し、
 Apache の `SSLCertificateFile` / `SSLCertificateKeyFile` を固定パスで指定する。
+
+#### HTTPS VirtualHost 設定
+
+HTTPS 有効化時は、ポート443用の VirtualHost を追加する。
+ルーティングルールはポート80と共通のため、別ファイルに切り出して Include で共有する。
+
+```apache
+# サーバコンフィグレベル（VirtualHost の外）
+# prg: は定義ごとにプロセスを起動するため、VirtualHost 内に置くと
+# 80/443 で2プロセス起動してしまう。必ずサーバコンフィグレベルで1回だけ定義する。
+RewriteMap router "prg:/usr/local/bin/node /router/app/router.js"
+
+# {ROUTER_HOME}/conf/routing-rules.conf に共通ルールを配置
+# ポート80/443 両方の VirtualHost から Include する
+
+# --- HTTP VirtualHost（初期設定時に固定） ---
+<VirtualHost *:80>
+    Include {ROUTER_HOME}/conf/routing-rules.conf
+    RequestHeader set X-Forwarded-Proto "http"
+</VirtualHost>
+
+# --- HTTPS VirtualHost（SSL 有効化時に追加） ---
+<VirtualHost *:443>
+    SSLEngine on
+    SSLCertificateFile {ROUTER_HOME}/ssl/cert.pem
+    SSLCertificateKeyFile {ROUTER_HOME}/ssl/key.pem
+
+    Include {ROUTER_HOME}/conf/routing-rules.conf
+    RequestHeader set X-Forwarded-Proto "https"
+</VirtualHost>
+```
+
+HTTPS VirtualHost の設定は、初回の証明書発行時に自動追加し graceful で有効化する。
+証明書ファイルが存在しない状態で VirtualHost を記述すると Apache が起動エラーとなるため、
+SSL 有効化前には含めない。
 
 #### graceful の実行方法
 
@@ -1060,7 +1168,24 @@ RewriteCond %{REMOTE_ADDR} ^(127\.0\.0\.1|::1)$
 * `192.168.*.*`（LAN経由）
 * 外部ネットワークからのアクセス
 
+### リモートアクセス（別端末からの利用）
+
+VPN 等の閉じたネットワーク内で、別端末からの管理UI利用および開発サイト閲覧を可能にする。
+デフォルトは localhost 限定（上記）とし、設定で有効化する。
+
+有効化時は以下の設計課題を解決する必要がある:
+
+* 管理UIのアクセス経路（現在の `Host: localhost` マッチでは別端末から到達できない）
+* ベースドメイン直アクセス時のリダイレクト先（`http://localhost` はリモートユーザの localhost に向かう）
+
+詳細は実装時に決定する。
+
 ---
+
+### ディレクトリ公開範囲
+
+本システムは graceful 不要を実現するため `<Directory />` で全パスを許可している（セクション6.6参照）。
+グループ登録時に `/etc` や `~/.ssh` 等のセキュリティ上重要なディレクトリを指定しないこと。
 
 ### 公開サイト
 
@@ -1097,13 +1222,25 @@ SSL証明書の発行時のみ graceful が発生する。
 | macOS              | 推奨  |
 | Linux              | 推奨  |
 | Windows + WSL2     | 推奨  |
-| WindowsネイティブApache | 非推奨 |
+| WindowsネイティブApache | 非対応 |
+
+Windows ネイティブ環境では、Apache の `mod_proxy` が Unix socket（`unix:` スキーム）を未サポートであり、`apachectl graceful` も存在しないため動作しない。Windows では WSL2 を使用すること。
+
+**Apache 2.4 以上を必須とする。** 本設計は Unix socket プロキシ（`unix:/path|http://...`）、`R=404` フラグ等の 2.4 固有機能に依存している。Apache 2.2 は 2018 年に EOL であり、対応しない。
 
 Node は **ルーティングエンジン兼管理 API バックエンド**として使用する。
 管理UI のフロントエンドは静的ファイルとして Apache が直接配信する。
 Apache の RewriteMap `prg:` サブプロセスとして動作するため、
 Apache が起動すれば Node も自動的に起動する。
 Node.js v18 LTS 以降を推奨（Worker Threads + 安定した構造化クローン）。
+
+### 技術スタック
+
+| レイヤ | 技術 | 理由 |
+| --- | --- | --- |
+| メインスレッド（Router） | Node 標準モジュールのみ | stdin/stdout 応答のみ。外部依存ゼロでクラッシュリスクを極小化 |
+| Worker Thread（Admin API） | Hono | 依存ゼロ・~14KB の軽量フレームワーク。Worker Thread 内での動作に最適。Node の `http.createServer` 経由で Unix socket にバインド |
+| フロントエンド（管理UI） | フルスクラッチ（HTML / CSS / vanilla JS） | フレームワーク・ビルドステップ不要。Apache が直接配信する静的ファイルとして完結 |
 
 ---
 
@@ -1118,6 +1255,7 @@ Node.js v18 LTS 以降を推奨（Worker Threads + 安定した構造化クロ�
 | --- | --- |
 | `{ROUTER_HOME}/app/` | Node アプリケーション（router.js, admin.js） |
 | `{ROUTER_HOME}/app/public/` | 管理UI フロントエンド（静的ファイル、Apache 直接配信） |
+| `{ROUTER_HOME}/conf/` | Apache 設定ファイル（routing-rules.conf 等） |
 | `{ROUTER_HOME}/data/` | routes.json 等のデータ |
 | `{ROUTER_HOME}/ssl/` | SSL証明書（オプション） |
 | `{ROUTER_HOME}/run/` | Unix ソケット |
@@ -1129,7 +1267,7 @@ Node.js v18 LTS 以降を推奨（Worker Threads + 安定した構造化クロ�
 * ベースドメイン設定: JSON（routes.json 内）
 * ルーティング情報: JSON（routes.json 内）+ メインスレッド インメモリ
 * グループ情報: JSON（routes.json 内）+ メインスレッド インメモリ
-* Apache設定: 初期設定時に固定（動的生成なし）
+* Apache設定: 初期設定時に固定（SSL 有効化時のみ HTTPS VirtualHost を追加）
 * 管理UIソケット: `{ROUTER_HOME}/run/admin.sock`
 * UI状態: 任意でSQLite可
 * 証明書: ファイル管理

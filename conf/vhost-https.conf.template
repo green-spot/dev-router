@@ -1,0 +1,17 @@
+# DevRouter — HTTPS VirtualHost 設定（SSL 有効化時に追加）
+# ssl.php が ${ROUTER_HOME} を実パスに置換して配置する
+
+<VirtualHost *:443>
+    SSLEngine on
+    SSLCertificateFile ${ROUTER_HOME}/ssl/cert.pem
+    SSLCertificateKeyFile ${ROUTER_HOME}/ssl/key.pem
+
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    Include ${ROUTER_HOME}/conf/routing-rules.conf
+    RequestHeader set X-Forwarded-Proto "https"
+</VirtualHost>

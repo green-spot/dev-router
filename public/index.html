@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevRouter</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header class="header">
+    <h1>DevRouter</h1>
+    <span class="status" id="header-status"></span>
+</header>
+
+<div class="alerts">
+    <div id="state-warning" class="alert alert-error"></div>
+    <div id="warning-banner" class="alert alert-warning"></div>
+</div>
+
+<nav class="tabs">
+    <button class="tab-btn active" data-tab="tab-dashboard">ダッシュボード</button>
+    <button class="tab-btn" data-tab="tab-groups">グループ</button>
+    <button class="tab-btn" data-tab="tab-routes">ルート</button>
+    <button class="tab-btn" data-tab="tab-domains">ベースドメイン</button>
+    <button class="tab-btn" data-tab="tab-env">環境チェック</button>
+</nav>
+
+<main class="main">
+
+    <!-- ダッシュボード -->
+    <div id="tab-dashboard" class="tab-panel active">
+        <div class="card">
+            <div class="card-header">
+                <span>有効なルート一覧</span>
+                <button class="btn btn-sm btn-secondary" onclick="scanGroups()">スキャン</button>
+            </div>
+            <div class="card-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>URL</th>
+                            <th>ターゲット</th>
+                            <th>種別</th>
+                            <th>ソース</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboard-routes"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- グループ管理 -->
+    <div id="tab-groups" class="tab-panel">
+        <div class="card">
+            <div class="card-header">
+                <span>グループの追加</span>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>ディレクトリパス</label>
+                        <input type="text" id="new-group-path" placeholder="/Users/me/sites/company">
+                    </div>
+                    <button class="btn btn-primary" onclick="addGroup()">追加</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span>登録済みグループ</span>
+                <button class="btn btn-sm btn-secondary" onclick="scanGroups()">スキャン</button>
+            </div>
+            <div class="card-body" id="groups-list"></div>
+        </div>
+    </div>
+
+    <!-- ルート管理 -->
+    <div id="tab-routes" class="tab-panel">
+        <div class="card">
+            <div class="card-header">ルートの追加</div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>スラグ</label>
+                        <input type="text" id="new-route-slug" placeholder="myapp">
+                    </div>
+                    <div class="form-group">
+                        <label>ターゲット</label>
+                        <input type="text" id="new-route-target" placeholder="/path/to/dir or http://localhost:3000">
+                    </div>
+                    <div class="form-group" style="flex:0 0 auto;">
+                        <label>種別</label>
+                        <select id="new-route-type">
+                            <option value="directory">ディレクトリ</option>
+                            <option value="proxy">プロキシ</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="addRoute()">追加</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">登録済みルート</div>
+            <div class="card-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>スラグ</th>
+                            <th>ターゲット</th>
+                            <th>種別</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="routes-list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ベースドメイン -->
+    <div id="tab-domains" class="tab-panel">
+        <div class="card">
+            <div class="card-header">ベースドメインの追加</div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>ドメイン</label>
+                        <input type="text" id="new-domain" placeholder="dev.local">
+                    </div>
+                    <button class="btn btn-primary" onclick="addDomain()">追加</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">登録済みベースドメイン</div>
+            <div class="card-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ドメイン</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="domains-list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 環境チェック -->
+    <div id="tab-env" class="tab-panel">
+        <div class="card">
+            <div class="card-header">環境チェック</div>
+            <div class="card-body" id="env-checks">
+                <div class="empty">タブを選択すると読み込みます</div>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
