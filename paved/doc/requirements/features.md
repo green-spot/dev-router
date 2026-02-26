@@ -3,7 +3,7 @@ title: "機能仕様"
 description: "DevRouter が提供する各機能の仕様と操作フローをまとめる"
 status: "draft"
 created_at: "2026-02-25"
-updated_at: "2026-02-25"
+updated_at: "2026-02-26"
 refs:
   - "requirements/overview.md"
   - "design/architecture.md"
@@ -104,27 +104,23 @@ sites/companyA/
 
 これにより Laravel 等（`public/` ベース）と WordPress 等（ルート直下）の両方に対応する。
 
-### 新サブディレクトリの自動検出
+### 新サブディレクトリの検出
 
-グループディレクトリに新しいサブディレクトリを作成した場合、routing.map には即座に反映されない。
-この問題は **resolve.php** で解決する。
+グループディレクトリに新しいサブディレクトリを作成した場合、VirtualHost 定義（routes.conf）には即座に反映されない。
+
+新しいサブディレクトリを検出するには、管理 UI の「スキャン」ボタンまたは scan API を実行する。スキャン実行時に routes.conf が再生成され、graceful restart で反映される。
 
 ```
 ユーザーがグループディレクトリに new-app/ を作成
   ↓
-ブラウザで new-app.127.0.0.1.nip.io にアクセス
+管理 UI で「スキャン」を実行（または scan API を呼び出し）
   ↓
-routing.map にマッチなし → Apache が resolve.php を実行
+グループディレクトリを再スキャン → new-app を発見 → routes.conf 再生成
   ↓
-resolve.php がグループディレクトリを再スキャン → new-app を発見 → routing.map 更新
+Apache graceful restart
   ↓
-302 リダイレクト（同じ URL）
-  ↓
-routing.map にマッチ → サイト表示
+new-app.127.0.0.1.nip.io にアクセス → サイト表示
 ```
-
-ユーザーから見ると一瞬リダイレクトが入るだけで、**ディレクトリを作るだけでアクセス可能**になる。
-管理 UI での操作は不要。
 
 ---
 
@@ -194,7 +190,7 @@ sites/companyA/
 | タイミング | チェック内容 |
 | --- | --- |
 | 管理 UI 登録時（明示登録） | パターン一致 + 既存スラグとの重複 |
-| routing.map 生成時（グループスキャン） | パターン一致 |
+| routes.conf 生成時（グループスキャン） | パターン一致 |
 
 ---
 
@@ -239,12 +235,12 @@ Apache の静的ファイル配信のみで動作し、SPA フォールバック
 
 | モジュール | 用途 |
 | --- | --- |
-| mod_rewrite | ルーティングルール・RewriteMap |
+| mod_rewrite | リダイレクトルール |
 | mod_proxy | リバースプロキシ |
 | mod_proxy_http | HTTP プロキシ |
 | mod_proxy_wstunnel | WebSocket プロキシ（HMR 等） |
 | mod_headers | X-Forwarded-Proto 設定 |
-| PHP（mod_php or php-fpm） | 管理 API + 自動解決 |
+| PHP（mod_php or php-fpm） | 管理 API + VirtualHost 定義生成 |
 
 **オプション:**
 
@@ -291,7 +287,7 @@ SSL が有効なベースドメインが複数ある場合は、全ワイルド�
   2. 全ベースドメイン（ssl: true）の SAN 一覧を構築: *.{bd1}, *.{bd2}, ...
   3. mkcert で証明書発行
   4. HTTPS VirtualHost 設定を生成（初回のみ）
-  5. apachectl graceful を実行
+  5. Apache graceful restart を実行
 ```
 
 ### 管理 UI での表示
@@ -317,17 +313,14 @@ php-fpm 使用時は graceful による API 切断が発生しない可能性が
 
 mod_php および php-fpm の両方に対応する。推奨は php-fpm。
 
+VirtualHost 生成方式では、各ルートが独立した VirtualHost を持ち、`DocumentRoot` が正しく設定されるため、mod_php でも `$_SERVER['DOCUMENT_ROOT']` が正確な値を返す。
+
 | | mod_php | php-fpm（推奨） |
 | --- | --- | --- |
-| 動的 DocumentRoot | RewriteRule でファイルパス書き換え | FastCGI パラメータで指定 |
-| `DOCUMENT_ROOT` 正確性 | VirtualHost の固定値が返る | リクエスト毎に正確な値を設定可能 |
+| DocumentRoot | VirtualHost ごとに正しく設定される | 同様 |
+| `DOCUMENT_ROOT` 正確性 | VirtualHost の DocumentRoot が正確に返る | 同様 |
 | .htaccess | `AllowOverride All` で動作 | 同様 |
 | サイト別設定 | 不可（全サイト共通） | プール別に設定可能 |
-
-### mod_php の制約
-
-`$_SERVER['DOCUMENT_ROOT']` が実際のディレクトリと異なる固定値を返す。
-主要フレームワーク（WordPress / Laravel 等）は `__DIR__` / `__FILE__` ベースでパスを解決するため実害は少ない。
 
 ---
 
@@ -348,7 +341,7 @@ mod_php および php-fpm の両方に対応する。推奨は php-fpm。
 
 ### ディレクトリ公開範囲
 
-本システムは graceful 不要を実現するため `<Directory />` で全パスを許可している。
+本システムは VirtualHost ごとに `<Directory>` で対象パスを許可している。
 グループ登録時に `/etc` や `~/.ssh` 等のセキュリティ上重要なディレクトリを指定しないこと。
 
 ### 公開サイト
@@ -367,8 +360,9 @@ VPN 等の閉じたネットワーク内で、別端末からの管理 UI 利用
 
 ### 初期設定（1回）
 
+- `sudo bash setup.sh` を実行（Apache 環境の自動検出 + sudoers 設定 + ファイルデプロイ）
+- Apache の httpd.conf に VirtualHost 設定を Include
 - Apache モジュール確認
-- ルーティング VirtualHost 追加
 - ベースドメイン登録（デフォルト: 127.0.0.1.nip.io）
 - （任意）SSL 有効化
 
@@ -379,5 +373,4 @@ VPN 等の閉じたネットワーク内で、別端末からの管理 UI 利用
 3. 保存
 4. URL クリック
 
-すべてのルーティング操作は再起動不要（routing.map の更新で即時反映）。
-SSL 証明書の発行時のみ graceful が発生する。
+ルーティング操作は routes.conf の再生成 + graceful restart で反映される（1秒未満、既存接続を中断しない）。

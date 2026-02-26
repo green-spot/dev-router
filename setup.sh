@@ -2,278 +2,154 @@
 set -euo pipefail
 
 # DevRouter セットアップスクリプト
-# 使い方: sudo bash setup.sh
+# ファイルを ROUTER_HOME に配置し、Apache への Include パスを案内する
+#
+# 使い方:
+#   sudo bash setup.sh                          → デフォルト /opt/dev-router に配置
+#   ROUTER_HOME=/path sudo bash setup.sh        → 任意のパスに配置
+#   APACHE_USER=www-data sudo bash setup.sh     → Apache ユーザを明示指定
+#
+# Apache が起動中であればバイナリパスと実行ユーザを自動検出する。
+# 起動していない場合は対話式で入力を求める。
 
-ROUTER_HOME="/opt/dev-router"
+ROUTER_HOME="${ROUTER_HOME:-/opt/dev-router}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 色付き出力
-RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-info()  { echo -e "${CYAN}[INFO]${NC} $1"; }
-ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
+YELLOW='\033[0;33m'
 
-# --- 1. OS 検出 ---
-detect_os() {
-    case "$(uname -s)" in
-        Darwin)
-            OS="macos"
-            ;;
-        Linux)
-            if grep -qi microsoft /proc/version 2>/dev/null; then
-                OS="wsl2"
-            else
-                OS="linux"
-            fi
-            ;;
-        *)
-            error "未対応の OS です: $(uname -s)"
-            exit 1
-            ;;
-    esac
-    info "OS 検出: ${OS}"
-}
+info() { echo -e "${CYAN}[INFO]${NC} $1"; }
+ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-# --- 2. 前提条件チェック ---
-check_prerequisites() {
-    local has_error=false
+# --- 1. ディレクトリ作成 ---
+info "ROUTER_HOME を作成: ${ROUTER_HOME}"
+mkdir -p "${ROUTER_HOME}"/{public/api/lib,public/css,public/js,public/default,conf,data,ssl}
 
-    # Apache チェック
-    if command -v apachectl &>/dev/null; then
-        local apache_version
-        apache_version=$(apachectl -v 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-        if [[ -n "$apache_version" ]]; then
-            ok "Apache ${apache_version} が見つかりました"
-        else
-            error "Apache のバージョンを取得できません"
-            has_error=true
-        fi
-    elif command -v httpd &>/dev/null; then
-        ok "Apache (httpd) が見つかりました"
-    else
-        error "Apache がインストールされていません"
-        case "$OS" in
-            macos)  echo "  → brew install httpd" ;;
-            linux)  echo "  → sudo apt install apache2  または  sudo yum install httpd" ;;
-            wsl2)   echo "  → sudo apt install apache2" ;;
-        esac
-        has_error=true
-    fi
+# --- 2. ファイルデプロイ ---
+info "ファイルをデプロイ中..."
 
-    # PHP チェック
-    if command -v php &>/dev/null; then
-        local php_version
-        php_version=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
-        ok "PHP ${php_version} が見つかりました"
-    else
-        error "PHP がインストールされていません"
-        case "$OS" in
-            macos)  echo "  → brew install php" ;;
-            linux)  echo "  → sudo apt install php  または  sudo yum install php" ;;
-            wsl2)   echo "  → sudo apt install php" ;;
-        esac
-        has_error=true
-    fi
+# public/ — PHP・静的ファイル
+rsync -a --delete "${SCRIPT_DIR}/public/" "${ROUTER_HOME}/public/"
 
-    # 必須 Apache モジュールチェック
-    local required_modules=("rewrite" "proxy" "proxy_http" "proxy_wstunnel" "headers")
-    local loaded_modules
-    loaded_modules=$(apachectl -M 2>/dev/null || httpd -M 2>/dev/null || echo "")
+# conf/ — テンプレート内の ${ROUTER_HOME} を実パスに置換して配置
+for tmpl in "${SCRIPT_DIR}"/conf/*.template; do
+    name=$(basename "$tmpl" .template)
+    sed "s|\${ROUTER_HOME}|${ROUTER_HOME}|g" "$tmpl" > "${ROUTER_HOME}/conf/${name}"
+done
 
-    for mod in "${required_modules[@]}"; do
-        if echo "$loaded_modules" | grep -qi "${mod}_module"; then
-            ok "mod_${mod} が有効です"
-        else
-            warn "mod_${mod} が無効です"
-            case "$OS" in
-                macos)
-                    echo "  → Homebrew Apache の場合、httpd.conf で LoadModule の行をアンコメントしてください"
-                    ;;
-                linux|wsl2)
-                    echo "  → sudo a2enmod ${mod} && sudo systemctl restart apache2"
-                    ;;
-            esac
-            has_error=true
-        fi
-    done
+# data/ — 初期データ（既存があれば保持）
+if [[ ! -f "${ROUTER_HOME}/data/routes.json" ]]; then
+    cp "${SCRIPT_DIR}/data/routes.json" "${ROUTER_HOME}/data/routes.json"
+    info "初期データを作成しました"
+else
+    info "既存のデータを保持します"
+fi
 
-    if $has_error; then
+# routes.conf / routes-ssl.conf — 存在しなければ空ファイルを作成
+[[ -f "${ROUTER_HOME}/data/routes.conf" ]]     || cp "${SCRIPT_DIR}/data/routes.conf" "${ROUTER_HOME}/data/routes.conf"
+[[ -f "${ROUTER_HOME}/data/routes-ssl.conf" ]] || cp "${SCRIPT_DIR}/data/routes-ssl.conf" "${ROUTER_HOME}/data/routes-ssl.conf"
+
+# data/ のパーミッション — Apache（PHP）から書き込めるようにする
+chmod -R 777 "${ROUTER_HOME}/data"
+
+ok "デプロイ完了"
+
+# --- 3. Apache 環境検出 + env.conf 生成 ---
+# 実行中の Apache プロセスからバイナリパスと実行ユーザを検出し、
+# conf/env.conf に書き出す。bin/graceful.sh がこの設定を読み込んで
+# graceful restart を実行する。
+ENV_CONF="${ROUTER_HOME}/conf/env.conf"
+
+# Apache マスタープロセス（root）の PID とバイナリパスを検出
+HTTPD_PID=$(ps aux | grep -E '[h]ttpd|[a]pache2' | grep root | head -1 | awk '{print $2}')
+
+if [[ -n "${HTTPD_PID}" ]]; then
+    HTTPD_BIN=$(ps -p "${HTTPD_PID}" -o command= | awk '{print $1}')
+    info "Apache バイナリ（プロセスから検出）: ${HTTPD_BIN}"
+else
+    HTTPD_BIN=""
+    if [[ -z "${HTTPD_BIN:-}" ]]; then
+        warn "Apache が起動していないためバイナリパスを自動検出できません"
         echo ""
-        warn "上記の問題を解決してから再実行してください"
-        exit 1
+        read -p "  Apache バイナリのパスを入力してください（例: /Applications/MAMP/Library/bin/httpd）: " HTTPD_BIN
     fi
-}
+fi
 
-# --- 3. ROUTER_HOME ディレクトリ作成 ---
-create_router_home() {
-    info "ROUTER_HOME を作成: ${ROUTER_HOME}"
+# Apache ワーカーの実行ユーザを検出
+if [[ -n "${APACHE_USER:-}" ]]; then
+    info "Apache ユーザ（環境変数指定）: ${APACHE_USER}"
+else
+    APACHE_USER=$(ps aux | grep -E '[h]ttpd|[a]pache2' | grep -v root | head -1 | awk '{print $1}')
 
-    mkdir -p "${ROUTER_HOME}"/{public/api/lib,public/css,public/js,conf,data,ssl}
-
-    ok "ディレクトリ構造を作成しました"
-}
-
-# --- 4-5. ファイルのデプロイ + 初期データ生成 ---
-deploy_files() {
-    info "ソースファイルをデプロイ中..."
-
-    # public/ — PHP ファイル・静的ファイル
-    rsync -a --delete "${SCRIPT_DIR}/public/" "${ROUTER_HOME}/public/"
-
-    # conf/ — Apache 設定ファイル（テンプレートを展開）
-    # routing-rules.conf: ${ROUTER_HOME} を実パスに置換
-    sed "s|\${ROUTER_HOME}|${ROUTER_HOME}|g" \
-        "${SCRIPT_DIR}/conf/routing-rules.conf" > "${ROUTER_HOME}/conf/routing-rules.conf"
-
-    # 初期 routes.json（既存がなければ作成）
-    if [[ ! -f "${ROUTER_HOME}/data/routes.json" ]]; then
-        cp "${SCRIPT_DIR}/data/routes.json" "${ROUTER_HOME}/data/routes.json"
-        info "初期 routes.json を作成しました"
+    if [[ -n "${APACHE_USER}" ]]; then
+        info "Apache ユーザ（プロセスから検出）: ${APACHE_USER}"
     else
-        info "既存の routes.json を保持します"
+        warn "Apache ユーザを自動検出できません"
+        echo ""
+        read -p "  Apache の実行ユーザを入力してください（例: _www, www-data）: " APACHE_USER
     fi
+fi
 
-    # 初期 routing.map（既存がなければ作成）
-    if [[ ! -f "${ROUTER_HOME}/data/routing.map" ]]; then
-        cp "${SCRIPT_DIR}/data/routing.map" "${ROUTER_HOME}/data/routing.map"
-        info "初期 routing.map を作成しました"
-    else
-        info "既存の routing.map を保持します"
-    fi
+# env.conf 生成
+if [[ -n "${HTTPD_BIN}" ]]; then
+    cat > "${ENV_CONF}" <<EOF
+# Apache 環境設定（setup.sh が自動生成）
+HTTPD_BIN=${HTTPD_BIN}
+EOF
+    ok "env.conf を生成しました: ${ENV_CONF}"
+else
+    warn "HTTPD_BIN が未指定のため env.conf を生成できません"
+    warn "後から setup.sh を再実行してください"
+fi
 
-    # Apache が PHP ファイルを書き込めるよう data/ のパーミッション設定
-    case "$OS" in
-        macos)
-            # Homebrew Apache は通常のユーザ権限で動作する
-            chmod -R 775 "${ROUTER_HOME}/data"
-            ;;
-        linux|wsl2)
-            # www-data が書き込めるようにする
-            chown -R www-data:www-data "${ROUTER_HOME}/data" 2>/dev/null || true
-            chmod -R 775 "${ROUTER_HOME}/data"
-            ;;
-    esac
+# --- 4. bin/graceful.sh デプロイ ---
+mkdir -p "${ROUTER_HOME}/bin"
+cp "${SCRIPT_DIR}/bin/graceful.sh" "${ROUTER_HOME}/bin/graceful.sh"
+chmod +x "${ROUTER_HOME}/bin/graceful.sh"
 
-    ok "ファイルをデプロイしました"
-}
+# --- 5. sudoers 設定（Apache graceful restart 用）---
+# Apache ワーカーユーザに対して graceful.sh の実行のみを許可する。
+SUDOERS_FILE="/etc/sudoers.d/dev-router"
+GRACEFUL_SCRIPT="${ROUTER_HOME}/bin/graceful.sh"
 
-# --- 6. Apache 設定の注入 ---
-inject_apache_config() {
-    info "Apache 設定を注入中..."
+if [[ -n "${APACHE_USER}" ]]; then
+    info "sudoers を設定中..."
+    echo "${APACHE_USER} ALL=(root) NOPASSWD: ${GRACEFUL_SCRIPT}" > "${SUDOERS_FILE}"
+    chmod 440 "${SUDOERS_FILE}"
+    ok "sudoers 設定完了（${APACHE_USER} に ${GRACEFUL_SCRIPT} を許可）"
+else
+    warn "Apache ユーザが未指定のため sudoers 設定をスキップします"
+    warn "後から APACHE_USER=xxx sudo bash setup.sh で再実行してください"
+fi
 
-    local config_content
-    config_content=$(sed "s|\${ROUTER_HOME}|${ROUTER_HOME}|g" \
-        "${SCRIPT_DIR}/conf/vhost-http.conf.template")
-
-    case "$OS" in
-        macos)
-            # Homebrew Apache
-            local httpd_conf_dir
-            if [[ -d "/opt/homebrew/etc/httpd/extra" ]]; then
-                httpd_conf_dir="/opt/homebrew/etc/httpd"
-            elif [[ -d "/usr/local/etc/httpd/extra" ]]; then
-                httpd_conf_dir="/usr/local/etc/httpd"
-            else
-                error "Homebrew Apache の設定ディレクトリが見つかりません"
-                exit 1
-            fi
-
-            echo "$config_content" > "${httpd_conf_dir}/extra/dev-router.conf"
-
-            # httpd.conf に Include がなければ追加
-            if ! grep -q "dev-router.conf" "${httpd_conf_dir}/httpd.conf"; then
-                echo "" >> "${httpd_conf_dir}/httpd.conf"
-                echo "# DevRouter" >> "${httpd_conf_dir}/httpd.conf"
-                echo "Include ${httpd_conf_dir}/extra/dev-router.conf" >> "${httpd_conf_dir}/httpd.conf"
-                info "httpd.conf に Include 行を追加しました"
-            else
-                info "httpd.conf に Include 行が既に存在します"
-            fi
-
-            ok "Apache 設定を配置しました: ${httpd_conf_dir}/extra/dev-router.conf"
-            ;;
-
-        linux|wsl2)
-            # Debian/Ubuntu 系
-            if [[ -d "/etc/apache2/sites-available" ]]; then
-                echo "$config_content" > "/etc/apache2/sites-available/dev-router.conf"
-
-                if command -v a2ensite &>/dev/null; then
-                    a2ensite dev-router.conf 2>/dev/null || true
-                fi
-
-                ok "Apache 設定を配置しました: /etc/apache2/sites-available/dev-router.conf"
-
-            # RHEL/CentOS 系
-            elif [[ -d "/etc/httpd/conf.d" ]]; then
-                echo "$config_content" > "/etc/httpd/conf.d/dev-router.conf"
-                ok "Apache 設定を配置しました: /etc/httpd/conf.d/dev-router.conf"
-            else
-                error "Apache 設定ディレクトリが見つかりません"
-                exit 1
-            fi
-            ;;
-    esac
-}
-
-# --- 7. Apache 再起動 ---
-restart_apache() {
-    info "Apache を再起動中..."
-
-    case "$OS" in
-        macos)
-            if brew services list 2>/dev/null | grep -q httpd; then
-                brew services restart httpd
-            else
-                apachectl graceful 2>/dev/null || sudo apachectl graceful
-            fi
-            ;;
-        linux|wsl2)
-            if command -v systemctl &>/dev/null; then
-                systemctl restart apache2 2>/dev/null || systemctl restart httpd 2>/dev/null || true
-            else
-                service apache2 restart 2>/dev/null || service httpd restart 2>/dev/null || true
-            fi
-            ;;
-    esac
-
-    ok "Apache を再起動しました"
-}
-
-# --- 8. 完了メッセージ ---
-show_complete() {
-    echo ""
-    echo -e "${GREEN}=====================================${NC}"
-    echo -e "${GREEN} DevRouter セットアップ完了${NC}"
-    echo -e "${GREEN}=====================================${NC}"
-    echo ""
-    echo -e "  管理 UI: ${CYAN}http://localhost${NC}"
-    echo -e "  ROUTER_HOME: ${ROUTER_HOME}"
-    echo ""
-    echo "  デフォルトベースドメイン: 127.0.0.1.nip.io"
-    echo "  例: http://myapp.127.0.0.1.nip.io"
-    echo ""
-}
-
-# --- メイン ---
-main() {
-    echo ""
-    echo -e "${CYAN}DevRouter セットアップ${NC}"
-    echo ""
-
-    detect_os
-    check_prerequisites
-    create_router_home
-    deploy_files
-    inject_apache_config
-    restart_apache
-    show_complete
-}
-
-main "$@"
+# --- 6. 案内 ---
+echo ""
+echo -e "${GREEN}=====================================${NC}"
+echo -e "${GREEN} DevRouter セットアップ完了${NC}"
+echo -e "${GREEN}=====================================${NC}"
+echo ""
+echo "  ROUTER_HOME: ${ROUTER_HOME}"
+echo ""
+echo "  あとは Apache の httpd.conf に以下の1行を追加して再起動してください:"
+echo ""
+echo -e "    ${CYAN}Include ${ROUTER_HOME}/conf/vhost-http.conf${NC}"
+echo ""
+echo "  SSL を使う場合は追加で:"
+echo ""
+echo -e "    ${CYAN}Include ${ROUTER_HOME}/conf/vhost-https.conf${NC}"
+echo ""
+echo "  必須 Apache モジュール:"
+echo "    mod_rewrite, mod_headers"
+echo "  プロキシ機能を使う場合は追加で:"
+echo "    mod_proxy, mod_proxy_http, mod_proxy_wstunnel"
+echo "  SSL の場合は追加で:"
+echo "    mod_ssl"
+echo ""
+echo "  Apache 再起動後、管理UIにアクセス:"
+echo -e "    ${CYAN}http://localhost${NC}"
+echo ""

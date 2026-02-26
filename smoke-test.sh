@@ -3,6 +3,9 @@ set -uo pipefail
 
 # DevRouter スモークテスト
 # 使い方: bash smoke-test.sh
+#         ROUTER_HOME=/path bash smoke-test.sh
+
+ROUTER_HOME="${ROUTER_HOME:-/opt/dev-router}"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -29,11 +32,48 @@ check() {
 }
 
 echo ""
-echo "DevRouter スモークテスト:"
+echo "DevRouter スモークテスト (ROUTER_HOME=${ROUTER_HOME}):"
+
+# --- ファイル配置チェック ---
 echo ""
+echo "ファイル配置:"
+
+for f in \
+    "conf/vhost-http.conf" \
+    "data/routes.json" \
+    "data/routes.conf" \
+    "data/routes-ssl.conf" \
+    "public/index.html" \
+    "public/default/index.html" \
+    "public/api/health.php"; do
+    if [[ -f "${ROUTER_HOME}/${f}" ]]; then
+        check "$f" "ok"
+    else
+        check "$f" "fail" "ファイルが存在しません"
+    fi
+done
+
+if [[ -w "${ROUTER_HOME}/data" ]]; then
+    check "data/ 書き込み権限" "ok"
+else
+    check "data/ 書き込み権限" "fail" "Apache (PHP) から書き込めない可能性があります"
+fi
+
+# --- HTTP チェック（Apache が動いている場合のみ） ---
+echo ""
+echo "HTTP チェック:"
+
+response=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/ 2>/dev/null || echo "000")
+
+if [[ "$response" == "000" ]]; then
+    check "Apache 接続" "fail" "localhost に接続できません（Apache が起動していないか、Include が未設定）"
+    echo ""
+    echo "結果: ${PASS} 成功 / ${FAIL} 失敗"
+    echo ""
+    exit 1
+fi
 
 # 1. 管理 UI アクセス
-response=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/ 2>/dev/null)
 if [[ "$response" == "200" ]]; then
     check "管理 UI アクセス" "ok"
 else
@@ -51,12 +91,11 @@ fi
 # 3. 環境チェック API
 env_check=$(curl -s http://localhost/api/env-check.php 2>/dev/null)
 if echo "$env_check" | grep -q '"checks"'; then
-    # 必須モジュールで missing がないかチェック
     missing=$(echo "$env_check" | grep -o '"status":"missing"' | head -1)
     if [[ -z "$missing" ]]; then
         check "環境チェック（全モジュール OK）" "ok"
     else
-        check "環境チェック" "ok" "一部モジュールが不足しています（詳細は管理 UI で確認）"
+        check "環境チェック" "ok" "一部モジュールが不足（詳細は管理 UI で確認）"
     fi
 else
     check "環境チェック API" "fail" "レスポンス: ${env_check}"

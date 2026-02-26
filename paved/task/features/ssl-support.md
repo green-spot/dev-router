@@ -4,7 +4,7 @@ description: "ssl.php と mkcert 連携、HTTPS VirtualHost 自動生成を実�
 status: "done"
 priority: "P2"
 created_at: "2026-02-25"
-updated_at: "2026-02-25"
+updated_at: "2026-02-26"
 ---
 
 # SSL 対応の実装
@@ -29,14 +29,16 @@ mkcert でワイルドカード証明書を発行し、HTTPS VirtualHost を自�
   2. 全ベースドメイン（ssl: true）の SAN 一覧を構築
   3. `mkcert` で証明書発行（`{ROUTER_HOME}/ssl/cert.pem`, `key.pem`）
   4. HTTPS VirtualHost 設定を生成（初回のみ）
-  5. `apachectl graceful` を実行
+  5. `triggerGracefulRestart()` で Apache graceful restart を実行
 
 ### HTTPS VirtualHost 設定の自動生成
+
+> **注意**: [ルーティング方式の変更](routing-architecture-change.md)により、HTTPS VirtualHost の構造が変更予定。routing-rules.conf の Include ではなく、vhost-https.conf.template（デフォルト + 管理UI VirtualHost + `Include routes-ssl.conf`）の構成になる。store.php が routes-ssl.conf にサブドメインごとの HTTPS VirtualHost を自動生成する。
 
 初回の証明書発行時に VirtualHost 設定を追加:
 - SSLEngine on
 - SSLCertificateFile / SSLCertificateKeyFile の固定パス
-- routing-rules.conf の Include
+- ~~routing-rules.conf の Include~~（→ `Include routes-ssl.conf` に変更予定）
 - `RequestHeader set X-Forwarded-Proto "https"`
 
 ### mkcert 状態検出

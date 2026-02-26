@@ -1,17 +1,31 @@
 # DevRouter — HTTP VirtualHost 設定
 # セットアップスクリプトが ${ROUTER_HOME} を実パスに置換して配置する
 
-# サーバコンフィグレベル（VirtualHost の外）
-RewriteMap lc "int:tolower"
-RewriteMap router "txt:${ROUTER_HOME}/data/routing.map"
-
+# デフォルト VirtualHost（名前ベース VirtualHost のフォールバック）
+# 最初に定義された VirtualHost がデフォルトになる
 <VirtualHost *:80>
-    <Directory />
+    DocumentRoot ${ROUTER_HOME}/public/default
+    <Directory ${ROUTER_HOME}/public/default>
+        Require all granted
+    </Directory>
+    # すべてのパスで 404 ページを返す
+    FallbackResource /index.html
+    ErrorDocument 404 /index.html
+</VirtualHost>
+
+# 管理UI（localhost のみ）
+<VirtualHost *:80>
+    ServerName localhost
+    ServerAlias 127.0.0.1 [::1]
+    DocumentRoot ${ROUTER_HOME}/public
+    <Directory ${ROUTER_HOME}/public>
         Options FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-
-    Include ${ROUTER_HOME}/conf/routing-rules.conf
+    DirectoryIndex index.php index.html index.htm
     RequestHeader set X-Forwarded-Proto "http"
 </VirtualHost>
+
+# 自動生成ルート
+Include ${ROUTER_HOME}/data/routes.conf

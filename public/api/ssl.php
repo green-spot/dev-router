@@ -107,14 +107,13 @@ function handlePost(): void {
     // 4. HTTPS VirtualHost 設定を生成（初回のみ）
     $httpsConfigDeployed = deployHttpsVhost();
 
-    // 5. apachectl graceful を実行
-    exec('sudo apachectl graceful 2>&1', $gracefulOutput, $gracefulExit);
+    // 5. Apache graceful restart
+    triggerGracefulRestart();
 
     jsonResponse([
         'message'       => 'HTTPS を有効化しました',
         'sans'          => $sans,
         'httpsDeployed' => $httpsConfigDeployed,
-        'graceful'      => $gracefulExit === 0,
     ]);
 }
 

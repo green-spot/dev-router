@@ -32,9 +32,7 @@ Apache を「Web サーバ」ではなく**ローカル開発用のルーティ�
 3. フォルダ or アプリケーション URL を登録
 4. サブドメイン URL へアクセス
 
-ほとんどの操作で Apache の再起動は不要。
-ルーティングは `txt:` RewriteMap のファイル更新で即反映される。
-SSL 証明書の明示的な発行時のみ graceful が発生する。
+ルーティング変更時は Apache の graceful restart で反映される（1秒未満、既存接続を中断しない）。
 
 ## 動作環境
 
@@ -55,11 +53,10 @@ Windows ネイティブ環境では Apache の `mod_proxy` が Unix socket を�
 
 | レイヤ | 技術 | 理由 |
 | --- | --- | --- |
-| ルーティングエンジン | `txt:` RewriteMap（ファイル参照） | Apache ネイティブ機能。長期プロセス不要でクラッシュリスクなし |
-| 未登録サブドメイン解決 | resolve.php | マッチなし時にグループディレクトリを再スキャンし自動解決 |
+| ルーティングエンジン | 名前ベース VirtualHost（自動生成） | サブドメインごとに独立した VirtualHost を生成。.htaccess 完全対応・環境非依存 |
 | 管理 API バックエンド | PHP（Apache 直接実行） | フレームワーク不要・Unix socket 不要・プロセス管理不要 |
 | フロントエンド（管理 UI） | HTML / CSS / vanilla JS | フレームワーク・ビルドステップ不要。Apache が直接配信する静的ファイルとして完結 |
-| データ永続化 | routes.json + routing.map（自動生成） | JSON で管理し、変更時に RewriteMap 用テキストファイルを再生成 |
+| データ永続化 | routes.json + routes.conf / routes-ssl.conf（自動生成） | JSON で管理し、変更時に VirtualHost 定義ファイルを再生成 + graceful restart |
 
 > **判断理由**: Node.js 版（RewriteMap `prg:` 方式）も検討したが、stdin/stdout プロトコル制約・Worker Thread によるスレッド分離・プロセスクラッシュ対策など、複雑さの大半が「Node を Apache 内で飼う」ことに起因していた。PHP 版は Apache + PHP 環境のみで完結し、外部依存ゼロでアーキテクチャが大幅に簡素化される。詳細は[意思決定記録](../decisions/index.md)を参照。
 

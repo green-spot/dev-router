@@ -1,171 +1,195 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevRouter</title>
-    <link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevRouter</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script type="module" src="/js/app.js"></script>
 </head>
 <body>
 
-<header class="header">
-    <h1>DevRouter</h1>
-    <span class="status" id="header-status"></span>
+<header>
+  <h1>DevRouter</h1>
 </header>
 
 <div class="alerts">
-    <div id="state-warning" class="alert alert-error"></div>
-    <div id="warning-banner" class="alert alert-warning"></div>
+  <div data-js-state-warning class="alert error" aria-live="assertive"></div>
+  <div data-js-warning-banner class="alert warning" aria-live="assertive"></div>
 </div>
 
-<nav class="tabs">
-    <button class="tab-btn active" data-tab="tab-dashboard">ダッシュボード</button>
-    <button class="tab-btn" data-tab="tab-groups">グループ</button>
-    <button class="tab-btn" data-tab="tab-routes">ルート</button>
-    <button class="tab-btn" data-tab="tab-domains">ベースドメイン</button>
-    <button class="tab-btn" data-tab="tab-env">環境チェック</button>
-</nav>
+<div class="tabs" role="tablist" aria-label="管理メニュー" data-js-tabs>
+  <button type="button" role="tab" id="tab-dashboard" aria-controls="panel-dashboard" aria-selected="true" tabindex="0" data-js-tab="dashboard">ダッシュボード</button>
+  <button type="button" role="tab" id="tab-groups" aria-controls="panel-groups" aria-selected="false" tabindex="-1" data-js-tab="groups">グループ</button>
+  <button type="button" role="tab" id="tab-routes" aria-controls="panel-routes" aria-selected="false" tabindex="-1" data-js-tab="routes">ルート</button>
+  <button type="button" role="tab" id="tab-domains" aria-controls="panel-domains" aria-selected="false" tabindex="-1" data-js-tab="domains">ベースドメイン</button>
+  <button type="button" role="tab" id="tab-env" aria-controls="panel-env" aria-selected="false" tabindex="-1" data-js-tab="env">環境チェック</button>
+</div>
 
-<main class="main">
+<main>
 
-    <!-- ダッシュボード -->
-    <div id="tab-dashboard" class="tab-panel active">
-        <div class="card">
-            <div class="card-header">
-                <span>有効なルート一覧</span>
-                <button class="btn btn-sm btn-secondary" onclick="scanGroups()">スキャン</button>
-            </div>
-            <div class="card-body">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>URL</th>
-                            <th>ターゲット</th>
-                            <th>種別</th>
-                            <th>ソース</th>
-                        </tr>
-                    </thead>
-                    <tbody id="dashboard-routes"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+  <!-- ダッシュボード -->
+  <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" data-js-tab-panel="dashboard" class="panel active">
+    <h2 class="visually-hidden">ダッシュボード</h2>
+    <section class="card">
+      <header>
+        <h3>有効なルート一覧</h3>
+        <button type="button" class="btn sm secondary" data-js-scan>スキャン</button>
+      </header>
+      <div class="body">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">URL</th>
+              <th scope="col">ターゲット</th>
+              <th scope="col">種別</th>
+              <th scope="col">ソース</th>
+            </tr>
+          </thead>
+          <tbody data-js-dashboard-routes></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
 
-    <!-- グループ管理 -->
-    <div id="tab-groups" class="tab-panel">
-        <div class="card">
-            <div class="card-header">
-                <span>グループの追加</span>
-            </div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>ディレクトリパス</label>
-                        <input type="text" id="new-group-path" placeholder="/Users/me/sites/company">
-                    </div>
-                    <button class="btn btn-primary" onclick="addGroup()">追加</button>
-                </div>
-            </div>
-        </div>
+  <!-- グループ管理 -->
+  <section id="panel-groups" role="tabpanel" aria-labelledby="tab-groups" data-js-tab-panel="groups" class="panel">
+    <h2 class="visually-hidden">グループ</h2>
+    <section class="card">
+      <header>
+        <h3>グループの追加</h3>
+      </header>
+      <div class="body">
+        <form data-js-add-group-form>
+          <div class="group">
+            <label>
+              <span>ディレクトリパス</span>
+              <input type="text" name="path" required placeholder="/Users/me/sites/company">
+            </label>
+          </div>
+          <button type="submit" class="btn primary">追加</button>
+        </form>
+      </div>
+    </section>
 
-        <div class="card">
-            <div class="card-header">
-                <span>登録済みグループ</span>
-                <button class="btn btn-sm btn-secondary" onclick="scanGroups()">スキャン</button>
-            </div>
-            <div class="card-body" id="groups-list"></div>
-        </div>
-    </div>
+    <section class="card">
+      <header>
+        <h3>登録済みグループ</h3>
+        <button type="button" class="btn sm secondary" data-js-scan>スキャン</button>
+      </header>
+      <div class="body" data-js-groups-list></div>
+    </section>
+  </section>
 
-    <!-- ルート管理 -->
-    <div id="tab-routes" class="tab-panel">
-        <div class="card">
-            <div class="card-header">ルートの追加</div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>スラグ</label>
-                        <input type="text" id="new-route-slug" placeholder="myapp">
-                    </div>
-                    <div class="form-group">
-                        <label>ターゲット</label>
-                        <input type="text" id="new-route-target" placeholder="/path/to/dir or http://localhost:3000">
-                    </div>
-                    <div class="form-group" style="flex:0 0 auto;">
-                        <label>種別</label>
-                        <select id="new-route-type">
-                            <option value="directory">ディレクトリ</option>
-                            <option value="proxy">プロキシ</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary" onclick="addRoute()">追加</button>
-                </div>
-            </div>
-        </div>
+  <!-- ルート管理 -->
+  <section id="panel-routes" role="tabpanel" aria-labelledby="tab-routes" data-js-tab-panel="routes" class="panel">
+    <h2 class="visually-hidden">ルート</h2>
+    <section class="card">
+      <header>
+        <h3>ルートの追加</h3>
+      </header>
+      <div class="body">
+        <form data-js-add-route-form>
+          <div class="group">
+            <label>
+              <span>スラグ</span>
+              <input type="text" name="slug" required placeholder="myapp">
+            </label>
+          </div>
+          <div class="group">
+            <label>
+              <span>ターゲット</span>
+              <input type="text" name="target" required placeholder="/path/to/dir or http://localhost:3000">
+            </label>
+          </div>
+          <div class="group auto">
+            <label>
+              <span>種別</span>
+              <select name="type">
+                <option value="directory">ディレクトリ</option>
+                <option value="proxy">プロキシ</option>
+              </select>
+            </label>
+          </div>
+          <button type="submit" class="btn primary">追加</button>
+        </form>
+      </div>
+    </section>
 
-        <div class="card">
-            <div class="card-header">登録済みルート</div>
-            <div class="card-body">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>スラグ</th>
-                            <th>ターゲット</th>
-                            <th>種別</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="routes-list"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    <section class="card">
+      <header>
+        <h3>登録済みルート</h3>
+      </header>
+      <div class="body">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">スラグ</th>
+              <th scope="col">ターゲット</th>
+              <th scope="col">種別</th>
+              <th scope="col"><span class="visually-hidden">操作</span></th>
+            </tr>
+          </thead>
+          <tbody data-js-routes-list></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
 
-    <!-- ベースドメイン -->
-    <div id="tab-domains" class="tab-panel">
-        <div class="card">
-            <div class="card-header">ベースドメインの追加</div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>ドメイン</label>
-                        <input type="text" id="new-domain" placeholder="dev.local">
-                    </div>
-                    <button class="btn btn-primary" onclick="addDomain()">追加</button>
-                </div>
-            </div>
-        </div>
+  <!-- ベースドメイン -->
+  <section id="panel-domains" role="tabpanel" aria-labelledby="tab-domains" data-js-tab-panel="domains" class="panel">
+    <h2 class="visually-hidden">ベースドメイン</h2>
+    <section class="card">
+      <header>
+        <h3>ベースドメインの追加</h3>
+      </header>
+      <div class="body">
+        <form data-js-add-domain-form>
+          <div class="group">
+            <label>
+              <span>ドメイン</span>
+              <input type="text" name="domain" required placeholder="dev.local">
+            </label>
+          </div>
+          <button type="submit" class="btn primary">追加</button>
+        </form>
+      </div>
+    </section>
 
-        <div class="card">
-            <div class="card-header">登録済みベースドメイン</div>
-            <div class="card-body">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ドメイン</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="domains-list"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    <section class="card">
+      <header>
+        <h3>登録済みベースドメイン</h3>
+      </header>
+      <div class="body">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">ドメイン</th>
+              <th scope="col"><span class="visually-hidden">操作</span></th>
+            </tr>
+          </thead>
+          <tbody data-js-domains-list></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
 
-    <!-- 環境チェック -->
-    <div id="tab-env" class="tab-panel">
-        <div class="card">
-            <div class="card-header">環境チェック</div>
-            <div class="card-body" id="env-checks">
-                <div class="empty">タブを選択すると読み込みます</div>
-            </div>
-        </div>
-    </div>
+  <!-- 環境チェック -->
+  <section id="panel-env" role="tabpanel" aria-labelledby="tab-env" data-js-tab-panel="env" class="panel">
+    <h2 class="visually-hidden">環境チェック</h2>
+    <section class="card">
+      <header>
+        <h3>環境チェック</h3>
+      </header>
+      <div class="body" data-js-env-checks>
+        <p class="empty">タブを選択すると読み込みます</p>
+      </div>
+    </section>
+  </section>
 
 </main>
 
-<div id="toast" class="toast"></div>
+<div data-js-toast class="toast" role="status"></div>
 
-<script src="/js/app.js"></script>
 </body>
 </html>

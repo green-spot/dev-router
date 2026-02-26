@@ -1,17 +1,36 @@
 # DevRouter — HTTPS VirtualHost 設定（SSL 有効化時に追加）
 # ssl.php が ${ROUTER_HOME} を実パスに置換して配置する
 
+# デフォルト VirtualHost（HTTPS）
 <VirtualHost *:443>
     SSLEngine on
     SSLCertificateFile ${ROUTER_HOME}/ssl/cert.pem
     SSLCertificateKeyFile ${ROUTER_HOME}/ssl/key.pem
+    DocumentRoot ${ROUTER_HOME}/public/default
+    <Directory ${ROUTER_HOME}/public/default>
+        Require all granted
+    </Directory>
+    # すべてのパスで 404 ページを返す
+    FallbackResource /index.html
+    ErrorDocument 404 /index.html
+</VirtualHost>
 
-    <Directory />
+# 管理UI（HTTPS）
+<VirtualHost *:443>
+    ServerName localhost
+    ServerAlias 127.0.0.1 [::1]
+    SSLEngine on
+    SSLCertificateFile ${ROUTER_HOME}/ssl/cert.pem
+    SSLCertificateKeyFile ${ROUTER_HOME}/ssl/key.pem
+    DocumentRoot ${ROUTER_HOME}/public
+    <Directory ${ROUTER_HOME}/public>
         Options FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-
-    Include ${ROUTER_HOME}/conf/routing-rules.conf
+    DirectoryIndex index.php index.html index.htm
     RequestHeader set X-Forwarded-Proto "https"
 </VirtualHost>
+
+# 自動生成ルート（HTTPS）
+Include ${ROUTER_HOME}/data/routes-ssl.conf

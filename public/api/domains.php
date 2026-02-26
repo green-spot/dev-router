@@ -45,9 +45,9 @@ function handlePost(): void {
 
     $domain = strtolower(trim($input['domain']));
 
-    // 簡易バリデーション: ドメイン形式チェック
-    if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $domain)) {
-        errorResponse('無効なドメイン形式です');
+    // ドメイン形式チェック（Apache 設定インジェクション防止）
+    if (!isValidDomain($domain)) {
+        errorResponse('無効なドメイン形式です（英数字・ハイフン・ドットのみ使用可）');
     }
 
     $result = loadState();

@@ -16,13 +16,10 @@ $modules = getLoadedModules();
 
 $checks = [];
 
-// 必須モジュール
+// 必須モジュール（ディレクトリ公開に必要）
 $requiredModules = [
-    'rewrite'          => 'mod_rewrite',
-    'proxy'            => 'mod_proxy',
-    'proxy_http'       => 'mod_proxy_http',
-    'proxy_wstunnel'   => 'mod_proxy_wstunnel',
-    'headers'          => 'mod_headers',
+    'rewrite'  => 'mod_rewrite',
+    'headers'  => 'mod_headers',
 ];
 
 foreach ($requiredModules as $key => $label) {
@@ -42,6 +39,23 @@ $checks[] = [
     'status'   => 'ok',
     'command'  => null,
 ];
+
+// リバースプロキシ用モジュール（プロキシ公開時に必要）
+$proxyModules = [
+    'proxy'            => 'mod_proxy',
+    'proxy_http'       => 'mod_proxy_http',
+    'proxy_wstunnel'   => 'mod_proxy_wstunnel',
+];
+
+foreach ($proxyModules as $key => $label) {
+    $enabled = in_array($key, $modules, true);
+    $checks[] = [
+        'category' => 'proxy',
+        'name'     => $label,
+        'status'   => $enabled ? 'ok' : 'missing',
+        'command'  => $enabled ? null : getEnableCommand($key, $os),
+    ];
+}
 
 // オプション: mod_ssl
 $sslEnabled = in_array('ssl', $modules, true);
@@ -85,8 +99,19 @@ function detectOS(): string {
 }
 
 function getLoadedModules(): array {
-    $output = '';
-    // apachectl -M の出力をパース
+    // 今リクエストを処理している Apache のモジュール一覧を取得
+    // apachectl -M だと別の Apache バイナリを参照してしまう可能性がある
+    if (function_exists('apache_get_modules')) {
+        $loaded = apache_get_modules();
+        $modules = [];
+        foreach ($loaded as $name) {
+            // "mod_rewrite" → "rewrite", "mod_proxy_http" → "proxy_http"
+            $modules[] = preg_replace('/^mod_/', '', $name);
+        }
+        return $modules;
+    }
+
+    // php-fpm 等で apache_get_modules() が使えない場合はコマンドにフォールバック
     exec('apachectl -M 2>/dev/null', $lines, $exitCode);
     if ($exitCode !== 0) {
         exec('httpd -M 2>/dev/null', $lines, $exitCode);
