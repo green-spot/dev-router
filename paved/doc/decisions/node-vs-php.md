@@ -2,11 +2,12 @@
 title: "Node.js 版 vs PHP 版の技術選定"
 description: "ルーティングエンジンと管理 API の実装方式として PHP 版を採用した判断理由とトレードオフ"
 status: "draft"
-created_at: "2026-02-25"
-updated_at: "2026-02-25"
+created_at: "2026-02-25 00:00:00"
+updated_at: "2026-02-26 00:00:00"
 refs:
   - "requirements/overview.md"
   - "design/architecture.md"
+  - "decisions/rewritemap-to-vhost.md"
 ---
 
 # Node.js 版 vs PHP 版の技術選定

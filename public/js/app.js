@@ -8,6 +8,8 @@ const TOAST_DURATION = 3000;
 const COPY_FEEDBACK_DURATION = 1500;
 const DEFAULT_DOMAIN = "127.0.0.1.nip.io";
 const MAX_TARGET_LENGTH = 50;
+const DEBOUNCE_MS = 200;
+const AUTOCOMPLETE_MAX_ITEMS = 50;
 
 // --- 状態管理 ---
 const state = {
@@ -16,6 +18,7 @@ const state = {
   routes: [],
   warning: null,
   currentDomain: null,
+  userHome: null,
 };
 
 // --- DOM要素の参照 ---
@@ -134,7 +137,7 @@ const setupTabs = () => {
 // --- データ読み込み ---
 
 const loadDomains = async () => {
-  const data = await api("domains.php");
+  const data = await api("domains");
   state.baseDomains = data.baseDomains;
   if (data.warning) {
     state.warning = data.warning;
@@ -143,7 +146,7 @@ const loadDomains = async () => {
 };
 
 const loadGroups = async () => {
-  const data = await api("groups.php");
+  const data = await api("groups");
   state.groups = data.groups;
   if (data.warning) {
     state.warning = data.warning;
@@ -151,7 +154,7 @@ const loadGroups = async () => {
 };
 
 const loadRoutes = async () => {
-  const data = await api("routes.php");
+  const data = await api("routes");
   state.routes = data.routes;
   if (data.warning) {
     state.warning = data.warning;
@@ -276,7 +279,7 @@ const addDomain = async () => {
   if (!domain) return;
 
   try {
-    const data = await api("domains.php", "POST", { domain });
+    const data = await api("domains", "POST", { domain });
     state.baseDomains = data.baseDomains;
     state.currentDomain = state.baseDomains.find((entry) => entry.current)?.domain ?? null;
     input.value = "";
@@ -293,7 +296,7 @@ const addDomain = async () => {
  */
 const setCurrent = async (domain) => {
   try {
-    const data = await api("domains.php", "PUT", { domain });
+    const data = await api("domains", "PUT", { domain });
     state.baseDomains = data.baseDomains;
     state.currentDomain = domain;
     renderAll();
@@ -311,7 +314,7 @@ const deleteDomain = async (domain) => {
   if (!confirm(`ベースドメイン "${domain}" を削除しますか？`)) return;
 
   try {
-    const data = await api("domains.php", "DELETE", { domain });
+    const data = await api("domains", "DELETE", { domain });
     state.baseDomains = data.baseDomains;
     state.currentDomain = state.baseDomains.find((entry) => entry.current)?.domain ?? null;
     renderAll();
@@ -375,13 +378,13 @@ const renderGroups = () => {
  */
 const addGroup = async () => {
   const input = ui.addGroupForm.querySelector(`[name="path"]`);
-  const path = input.value.trim();
+  const path = input.value.trim().replace(/\/+$/, "");
   if (!path) return;
 
   try {
-    const data = await api("groups.php", "POST", { path });
+    const data = await api("groups", "POST", { path });
     state.groups = data.groups;
-    input.value = "";
+    input.value = state.userHome ? state.userHome + "/" : "";
     renderAll();
     showToast("グループを追加しました");
   } catch (error) {
@@ -397,7 +400,7 @@ const deleteGroup = async (path) => {
   if (!confirm(`グループ "${path}" を削除しますか？`)) return;
 
   try {
-    const data = await api("groups.php", "DELETE", { path });
+    const data = await api("groups", "DELETE", { path });
     state.groups = data.groups;
     renderAll();
     showToast("グループを削除しました");
@@ -419,7 +422,7 @@ const moveGroup = async (fromIndex, toIndex) => {
   order.splice(toIndex, 0, moved);
 
   try {
-    const data = await api("groups.php", "PUT", { order });
+    const data = await api("groups", "PUT", { order });
     state.groups = data.groups;
     renderAll();
     showToast("グループの優先順位を変更しました");
@@ -479,7 +482,7 @@ const setupGroupDragDrop = () => {
  */
 const scanGroups = async () => {
   try {
-    const data = await api("scan.php", "POST");
+    const data = await api("scan", "POST");
     state.groups = data.groups;
     renderAll();
     showToast("スキャン完了");
@@ -522,15 +525,15 @@ const addRoute = async () => {
   const targetInput = ui.addRouteForm.querySelector(`[name="target"]`);
   const typeSelect = ui.addRouteForm.querySelector(`[name="type"]`);
   const slug = slugInput.value.trim();
-  const target = targetInput.value.trim();
+  const target = targetInput.value.trim().replace(/\/+$/, "");
   const type = typeSelect.value;
   if (!slug || !target) return;
 
   try {
-    const data = await api("routes.php", "POST", { slug, target, type });
+    const data = await api("routes", "POST", { slug, target, type });
     state.routes = data.routes;
     slugInput.value = "";
-    targetInput.value = "";
+    targetInput.value = type === "directory" && state.userHome ? state.userHome + "/" : "";
     renderAll();
     showToast("ルートを追加しました");
   } catch (error) {
@@ -546,7 +549,7 @@ const deleteRoute = async (slug) => {
   if (!confirm(`ルート "${slug}" を削除しますか？`)) return;
 
   try {
-    const data = await api("routes.php", "DELETE", { slug });
+    const data = await api("routes", "DELETE", { slug });
     state.routes = data.routes;
     renderAll();
     showToast("ルートを削除しました");
@@ -560,10 +563,17 @@ const deleteRoute = async (slug) => {
 const loadEnvCheck = async () => {
   ui.envChecks.innerHTML = `<p class="empty">読み込み中...</p>`;
 
+  const sections = [
+    { key: "required",  label: "必須" },
+    { key: "proxy",     label: "プロキシ（リバースプロキシ使用時）" },
+    { key: "websocket", label: "WebSocket（HMR 使用時）" },
+    { key: "ssl",       label: "SSL（HTTPS 使用時）" },
+  ];
+
   try {
-    const data = await api("env-check.php");
-    const requiredItems = [];
-    const optionalItems = [];
+    const data = await api("env-check");
+    const grouped = {};
+    for (const s of sections) grouped[s.key] = [];
 
     for (const check of data.checks) {
       let icon;
@@ -581,17 +591,16 @@ const loadEnvCheck = async () => {
         ${check.command ? `<span class="command">${escapeAttr(check.command)}</span>` : ""}
       </li>`;
 
-      if (check.category === "optional") {
-        optionalItems.push(itemHtml);
-      } else {
-        requiredItems.push(itemHtml);
+      if (grouped[check.category]) {
+        grouped[check.category].push(itemHtml);
       }
     }
 
-    let html = `<ul class="checks">${requiredItems.join("")}</ul>`;
-    if (optionalItems.length > 0) {
-      html += `<p>── オプション ──</p>`;
-      html += `<ul class="checks">${optionalItems.join("")}</ul>`;
+    let html = "";
+    for (const s of sections) {
+      if (grouped[s.key].length === 0) continue;
+      html += `<p class="checks-label">${escapeAttr(s.label)}</p>`;
+      html += `<ul class="checks">${grouped[s.key].join("")}</ul>`;
     }
 
     ui.envChecks.innerHTML = html;
@@ -654,6 +663,203 @@ const showToast = (message) => {
   toastTimer = setTimeout(() => ui.toast.classList.remove("visible"), TOAST_DURATION);
 };
 
+// --- ディレクトリ・オートコンプリート ---
+
+/**
+ * デバウンス関数
+ * @param {Function} fn 実行する関数
+ * @param {number} ms 待機ミリ秒
+ * @returns {Function} デバウンスされた関数
+ */
+const debounce = (fn, ms) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+};
+
+/**
+ * ディレクトリ候補を取得する
+ * @param {string} path 入力パス
+ * @param {boolean} showDot ドットディレクトリを表示するか
+ * @returns {Promise<Object>} APIレスポンス
+ */
+const fetchDirCandidates = async (path, showDot = false) => {
+  const params = new URLSearchParams({ path });
+  if (showDot) params.set("dot", "1");
+  return api(`browse-dirs?${params}`);
+};
+
+/**
+ * ホームディレクトリを取得する
+ */
+const loadUserHome = async () => {
+  const data = await api("browse-dirs");
+  state.userHome = data.userHome;
+};
+
+/**
+ * オートコンプリート付き入力欄を初期化する
+ * @param {HTMLInputElement} input 対象の input 要素
+ */
+const initDirAutocomplete = (input) => {
+  const wrapper = input.closest(".dir-autocomplete");
+  if (!wrapper) return;
+
+  const dropdown = wrapper.querySelector(".dir-autocomplete-dropdown");
+  const dotToggle = wrapper.querySelector("[data-js-dot-toggle]");
+
+  let showDot = false;
+  let activeIndex = -1;
+  let candidates = [];
+
+  // 初期値をホームディレクトリにセット
+  if (!input.value && state.userHome) {
+    input.value = state.userHome + "/";
+  }
+
+  // ドットディレクトリ・トグル
+  if (dotToggle) {
+    dotToggle.addEventListener("click", () => {
+      showDot = !showDot;
+      dotToggle.classList.toggle("active", showDot);
+      dotToggle.setAttribute("aria-pressed", showDot);
+      triggerFetch(input.value);
+    });
+  }
+
+  // 候補を描画する
+  const renderDropdown = (dirs) => {
+    candidates = dirs;
+    activeIndex = -1;
+
+    if (dirs.length === 0) {
+      dropdown.innerHTML = "";
+      dropdown.classList.remove("visible");
+      return;
+    }
+
+    dropdown.innerHTML = dirs.slice(0, AUTOCOMPLETE_MAX_ITEMS).map((dir, i) =>
+      `<div class="dir-autocomplete-item" data-index="${i}" data-dir="${escapeAttr(dir)}">${escapeAttr(dir)}/</div>`
+    ).join("");
+    dropdown.classList.add("visible");
+  };
+
+  // 候補をフェッチ
+  const triggerFetch = debounce(async (value) => {
+    if (!value) {
+      dropdown.innerHTML = "";
+      dropdown.classList.remove("visible");
+      return;
+    }
+
+    try {
+      const data = await fetchDirCandidates(value, showDot);
+      renderDropdown(data.dirs);
+    } catch {
+      dropdown.innerHTML = "";
+      dropdown.classList.remove("visible");
+    }
+  }, DEBOUNCE_MS);
+
+  // 候補を選択する
+  const selectCandidate = (dirName) => {
+    const value = input.value;
+    const basePath = value.endsWith("/")
+      ? value
+      : value.substring(0, value.lastIndexOf("/") + 1);
+
+    input.value = basePath + dirName + "/";
+    dropdown.classList.remove("visible");
+    input.focus();
+
+    // 次の階層を自動取得
+    triggerFetch(input.value);
+  };
+
+  // 入力イベント
+  input.addEventListener("input", () => {
+    triggerFetch(input.value);
+  });
+
+  // フォーカス時にも候補を表示
+  input.addEventListener("focus", () => {
+    if (input.value) {
+      triggerFetch(input.value);
+    }
+  });
+
+  // キーボードナビゲーション
+  input.addEventListener("keydown", (event) => {
+    if (!dropdown.classList.contains("visible")) return;
+
+    const items = dropdown.querySelectorAll(".dir-autocomplete-item");
+    if (items.length === 0) return;
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        updateActiveItem(items);
+        break;
+
+      case "ArrowUp":
+        event.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, -1);
+        updateActiveItem(items);
+        break;
+
+      case "Enter":
+        if (activeIndex >= 0 && activeIndex < items.length) {
+          event.preventDefault();
+          selectCandidate(candidates[activeIndex]);
+        }
+        break;
+
+      case "Escape":
+        dropdown.classList.remove("visible");
+        activeIndex = -1;
+        break;
+
+      case "Tab":
+        if (candidates.length === 1) {
+          event.preventDefault();
+          selectCandidate(candidates[0]);
+        } else {
+          dropdown.classList.remove("visible");
+        }
+        break;
+    }
+  });
+
+  // ドロップダウンのクリックイベント（mousedown で blur より先に発火）
+  dropdown.addEventListener("mousedown", (event) => {
+    const item = event.target.closest(".dir-autocomplete-item");
+    if (item) {
+      event.preventDefault();
+      selectCandidate(item.dataset.dir);
+    }
+  });
+
+  // フォーカスが外れたらドロップダウンを閉じる
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      dropdown.classList.remove("visible");
+    }, 150);
+  });
+
+  // アクティブアイテムの更新
+  const updateActiveItem = (items) => {
+    items.forEach((item, i) => {
+      item.classList.toggle("active", i === activeIndex);
+      if (i === activeIndex) {
+        item.scrollIntoView({ block: "nearest" });
+      }
+    });
+  };
+};
+
 // --- イベントリスナーの設定 ---
 
 const setupEventListeners = () => {
@@ -672,6 +878,30 @@ const setupEventListeners = () => {
     event.preventDefault();
     addDomain();
   });
+
+  // ルート種別切替でオートコンプリートの有効/無効を切替
+  const routeTypeSelect = ui.addRouteForm.querySelector(`[name="type"]`);
+  const routeTargetWrapper = ui.addRouteForm.querySelector(".dir-autocomplete");
+
+  if (routeTypeSelect && routeTargetWrapper) {
+    routeTypeSelect.addEventListener("change", () => {
+      const isDir = routeTypeSelect.value === "directory";
+      routeTargetWrapper.classList.toggle("autocomplete-disabled", !isDir);
+      const targetInput = routeTargetWrapper.querySelector("input");
+
+      if (isDir) {
+        if (!targetInput.value || targetInput.value.startsWith("http")) {
+          targetInput.value = state.userHome ? state.userHome + "/" : "";
+        }
+        targetInput.placeholder = "/Users/me/sites/myapp";
+      } else {
+        if (targetInput.value && !targetInput.value.startsWith("http")) {
+          targetInput.value = "";
+        }
+        targetInput.placeholder = "http://localhost:3000";
+      }
+    });
+  }
 
   // グローバルなクリックイベント委譲
   document.addEventListener("click", (event) => {
@@ -746,8 +976,14 @@ const init = async () => {
       loadDomains(),
       loadGroups(),
       loadRoutes(),
+      loadUserHome(),
     ]);
     renderAll();
+
+    // オートコンプリートを初期化
+    document.querySelectorAll(".dir-autocomplete input[type='text']").forEach((input) => {
+      initDirAutocomplete(input);
+    });
   } catch (error) {
     showToast(`初期読み込みに失敗しました: ${error.message}`);
   }

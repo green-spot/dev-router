@@ -2,7 +2,9 @@
 # ssl.php が ${ROUTER_HOME} を実パスに置換して配置する
 
 # デフォルト VirtualHost（HTTPS）
+# グローバル ServerName との衝突を避けるため明示的に ServerName を設定する
 <VirtualHost *:443>
+    ServerName devrouter-fallback.internal
     SSLEngine on
     SSLCertificateFile ${ROUTER_HOME}/ssl/cert.pem
     SSLCertificateKeyFile ${ROUTER_HOME}/ssl/key.pem

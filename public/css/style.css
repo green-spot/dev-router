@@ -411,11 +411,15 @@ table {
   }
 }
 
-.checks + p {
-  padding: 0.5rem 0;
+.checks-label {
   font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-text-muted);
-  border-bottom: 1px solid var(--color-muted-bg);
+  padding: 0.5rem 0 0.25rem;
+
+  &:first-child {
+    padding-top: 0;
+  }
 }
 
 /* ===================
@@ -508,4 +512,95 @@ table {
   color: var(--color-text-muted);
   cursor: grab;
   user-select: none;
+}
+
+/* ===================
+   ディレクトリ・オートコンプリート
+=================== */
+.dir-autocomplete {
+  position: relative;
+}
+
+.dir-autocomplete-input-row {
+  display: flex;
+  gap: 0;
+
+  > input {
+    flex: 1;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+.dir-autocomplete-dot-toggle {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--color-muted-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: var(--color-secondary-hover);
+  }
+
+  &.active {
+    background: var(--color-primary);
+    color: var(--color-surface);
+    border-color: var(--color-primary);
+  }
+}
+
+.dir-autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  display: none;
+
+  &.visible {
+    display: block;
+  }
+}
+
+.dir-autocomplete-item {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, monospace;
+  cursor: pointer;
+  color: var(--color-text);
+
+  &:hover,
+  &.active {
+    background: var(--color-badge-info-bg);
+    color: var(--color-badge-info);
+  }
+}
+
+.dir-autocomplete.autocomplete-disabled {
+
+  .dir-autocomplete-dot-toggle {
+    display: none;
+  }
+
+  .dir-autocomplete-input-row > input {
+    border-radius: var(--radius);
+  }
+
+  .dir-autocomplete-dropdown {
+    display: none !important;
+  }
 }

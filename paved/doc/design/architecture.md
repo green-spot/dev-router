@@ -2,12 +2,13 @@
 title: "アーキテクチャ設計"
 description: "DevRouter の全体構成・VirtualHost 生成方式・Apache 設定・データ管理の設計をまとめる"
 status: "draft"
-created_at: "2026-02-25"
-updated_at: "2026-02-26"
+created_at: "2026-02-25 00:00:00"
+updated_at: "2026-02-26 00:00:00"
 refs:
   - "requirements/overview.md"
   - "requirements/features.md"
   - "decisions/graceful-restart-mechanism.md"
+  - "decisions/rewritemap-to-vhost.md"
 ---
 
 # アーキテクチャ設計
@@ -108,12 +109,15 @@ Apache の名前ベース VirtualHost マッチングにより以下の順で解
 
 ```apache
 # デフォルト VirtualHost（名前ベース VirtualHost のフォールバック）
-# 最初に定義された VirtualHost がデフォルトになる
+# グローバル ServerName との衝突を避けるため明示的に ServerName を設定する
 <VirtualHost *:80>
+    ServerName devrouter-fallback.internal
     DocumentRoot {ROUTER_HOME}/public/default
     <Directory {ROUTER_HOME}/public/default>
         Require all granted
     </Directory>
+    FallbackResource /index.html
+    ErrorDocument 404 /index.html
 </VirtualHost>
 
 # 管理UI（localhost のみ）
@@ -138,7 +142,9 @@ Include {ROUTER_HOME}/data/routes.conf
 
 ```apache
 # デフォルト VirtualHost（HTTPS）
+# グローバル ServerName との衝突を避けるため明示的に ServerName を設定する
 <VirtualHost *:443>
+    ServerName devrouter-fallback.internal
     SSLEngine on
     SSLCertificateFile {ROUTER_HOME}/ssl/cert.pem
     SSLCertificateKeyFile {ROUTER_HOME}/ssl/key.pem
@@ -146,6 +152,8 @@ Include {ROUTER_HOME}/data/routes.conf
     <Directory {ROUTER_HOME}/public/default>
         Require all granted
     </Directory>
+    FallbackResource /index.html
+    ErrorDocument 404 /index.html
 </VirtualHost>
 
 # 管理UI（HTTPS）
@@ -404,26 +412,28 @@ PHP Admin API からの変更は以下の順で反映される:
 | タイミング | トリガー |
 | --- | --- |
 | ルート変更時 | `saveState()` 内で常に再生成 + graceful |
-| 管理 UI からの手動スキャン | `/api/scan.php` → `saveState()` → 再生成 + graceful |
+| 管理 UI からの手動スキャン | `POST /api/scan` → `saveState()` → 再生成 + graceful |
 
 ---
 
 ## 10. Admin API 設計
 
-Admin API は Apache が直接実行するプレーン PHP ファイルで構成する。
+Admin API は単一エントリポイント（`index.php`）+ 最小ルーターで構成する。
+`PATH_INFO` ベースのルーティングにより、`.htaccess` の RewriteRule でリクエストを `index.php` に集約する。
 フレームワーク不要。Unix socket 不要。プロセス管理不要。
 
 ### エンドポイント
 
 | エンドポイント | メソッド | 機能 |
 | --- | --- | --- |
-| `/api/health.php` | GET | ヘルスチェック |
-| `/api/routes.php` | GET / POST / DELETE | スラグ指定・リバースプロキシの CRUD |
-| `/api/groups.php` | GET / POST / PUT / DELETE | グループの CRUD + 優先順位変更 |
-| `/api/domains.php` | GET / POST / DELETE | ベースドメインの CRUD + current 切替 |
-| `/api/ssl.php` | GET / POST | SSL 状態確認・証明書発行 |
-| `/api/env-check.php` | GET | 環境チェック（apachectl -M 等） |
-| `/api/scan.php` | POST | グループディレクトリの手動スキャン → routes.conf 再生成 |
+| `/api/health` | GET | ヘルスチェック |
+| `/api/routes` | GET / POST / DELETE | スラグ指定・リバースプロキシの CRUD |
+| `/api/groups` | GET / POST / PUT / DELETE | グループの CRUD + 優先順位変更 |
+| `/api/domains` | GET / POST / PUT / DELETE | ベースドメインの CRUD + current 切替 |
+| `/api/ssl` | GET / POST | SSL 状態確認・証明書発行 |
+| `/api/env-check` | GET | 環境チェック（apachectl -M 等） |
+| `/api/scan` | POST | グループディレクトリの手動スキャン → routes.conf 再生成 |
+| `/api/browse-dirs` | GET | ディレクトリブラウズ（オートコンプリート用） |
 
 すべての API は管理 UI（localhost）からのみアクセス可能。
 
@@ -484,16 +494,14 @@ SSL 有効化時は vhost-https.conf と routes-ssl.conf の2ファイルが使�
     css/
     js/
     default/               ← デフォルト VirtualHost 用 404 ページ
-    api/                   ← PHP Admin API
-      health.php
-      routes.php
-      groups.php
-      domains.php
-      ssl.php
-      env-check.php
-      scan.php
+    api/                   ← PHP Admin API（単一エントリポイント）
+      .htaccess            ← RewriteRule で index.php に集約
+      index.php            ← 全エンドポイントのルーティング + ハンドラ定義
       lib/
+        router.php         ← 最小ルーター（PATH_INFO ベース）+ リクエストヘルパー
         store.php          ← routes.json 読み書き + routes.conf 生成 + graceful restart
+        env.php            ← 環境チェック用ヘルパー
+        ssl.php            ← SSL 関連ヘルパー
   bin/
     graceful.sh            ← Apache graceful restart ラッパー（root 所有、sudoers で許可）
   conf/

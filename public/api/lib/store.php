@@ -13,17 +13,17 @@
  */
 
 // ROUTER_HOME: このファイルから3階層上がリポジトリルート
-define('ROUTER_HOME', realpath(__DIR__ . '/../../..'));
-define('ROUTES_JSON', ROUTER_HOME . '/data/routes.json');
-define('ROUTES_BAK',  ROUTER_HOME . '/data/routes.json.bak');
-define('ROUTES_CONF',     ROUTER_HOME . '/data/routes.conf');
-define('ROUTES_SSL_CONF', ROUTER_HOME . '/data/routes-ssl.conf');
+define("ROUTER_HOME", realpath(__DIR__ . "/../../.."));
+define("ROUTES_JSON", ROUTER_HOME . "/data/routes.json");
+define("ROUTES_BAK",  ROUTER_HOME . "/data/routes.json.bak");
+define("ROUTES_CONF",     ROUTER_HOME . "/data/routes.conf");
+define("ROUTES_SSL_CONF", ROUTER_HOME . "/data/routes-ssl.conf");
 
 // スラグの許可パターン
-define('SLUG_PATTERN', '/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/');
+define("SLUG_PATTERN", "/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/");
 
 // ベースドメインの許可パターン（英数字・ハイフン・ドットのみ）
-define('DOMAIN_PATTERN', '/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i');
+define("DOMAIN_PATTERN", "/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i");
 
 /**
  * routes.json を読み込む。
@@ -32,57 +32,57 @@ define('DOMAIN_PATTERN', '/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i');
  * @return array ['state' => array, 'warning' => string|null]
  */
 function loadState(): array {
-    $warning = null;
+  $warning = null;
 
-    // メインファイルから読み込み
-    if (file_exists(ROUTES_JSON)) {
-        $json = file_get_contents(ROUTES_JSON);
-        $state = json_decode($json, true);
-        if (is_array($state) && isset($state['baseDomains'])) {
-            return ['state' => $state, 'warning' => null];
-        }
+  // メインファイルから読み込み
+  if(file_exists(ROUTES_JSON)) {
+    $json = file_get_contents(ROUTES_JSON);
+    $state = json_decode($json, true);
+    if(is_array($state) && isset($state["baseDomains"])) {
+      return ["state" => $state, "warning" => null];
     }
+  }
 
-    // バックアップから復元
-    if (file_exists(ROUTES_BAK)) {
-        $json = file_get_contents(ROUTES_BAK);
-        $state = json_decode($json, true);
-        if (is_array($state) && isset($state['baseDomains'])) {
-            // バックアップをメインとして書き戻す
-            file_put_contents(ROUTES_JSON, $json);
-            return [
-                'state' => $state,
-                'warning' => 'routes.json のパースに失敗したため、バックアップから復元しました',
-            ];
-        }
+  // バックアップから復元
+  if(file_exists(ROUTES_BAK)) {
+    $json = file_get_contents(ROUTES_BAK);
+    $state = json_decode($json, true);
+    if(is_array($state) && isset($state["baseDomains"])) {
+      // バックアップをメインとして書き戻す
+      file_put_contents(ROUTES_JSON, $json);
+      return [
+        "state" => $state,
+        "warning" => "routes.json のパースに失敗したため、バックアップから復元しました",
+      ];
     }
+  }
 
-    // 空の初期状態
-    $state = getEmptyState();
-    $json = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-    file_put_contents(ROUTES_JSON, $json);
+  // 空の初期状態
+  $state = getEmptyState();
+  $json = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+  file_put_contents(ROUTES_JSON, $json);
 
-    return [
-        'state' => $state,
-        'warning' => 'routes.json とバックアップの両方が利用できないため、空の初期状態で起動しました',
-    ];
+  return [
+    "state" => $state,
+    "warning" => "routes.json とバックアップの両方が利用できないため、空の初期状態で起動しました",
+  ];
 }
 
 /**
  * 空の初期状態を返す
  */
 function getEmptyState(): array {
-    return [
-        'baseDomains' => [
-            [
-                'domain'  => '127.0.0.1.nip.io',
-                'current' => true,
-                'ssl'     => false,
-            ],
-        ],
-        'groups' => [],
-        'routes' => [],
-    ];
+  return [
+    "baseDomains" => [
+      [
+        "domain"  => "127.0.0.1.nip.io",
+        "current" => true,
+        "ssl"     => false,
+      ],
+    ],
+    "groups" => [],
+    "routes" => [],
+  ];
 }
 
 /**
@@ -93,10 +93,10 @@ function getEmptyState(): array {
  * @return bool
  */
 function isValidDomain(string $domain): bool {
-    if ($domain === '' || strlen($domain) > 253) {
-        return false;
-    }
-    return (bool) preg_match(DOMAIN_PATTERN, $domain);
+  if($domain === "" || strlen($domain) > 253) {
+    return false;
+  }
+  return (bool) preg_match(DOMAIN_PATTERN, $domain);
 }
 
 /**
@@ -112,28 +112,28 @@ function isValidDomain(string $domain): bool {
  * @return void
  */
 function saveState(array $state): void {
-    $json = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+  $json = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
-    // バックアップ作成（既存ファイルがある場合）
-    if (file_exists(ROUTES_JSON)) {
-        copy(ROUTES_JSON, ROUTES_BAK);
-    }
+  // バックアップ作成（既存ファイルがある場合）
+  if(file_exists(ROUTES_JSON)) {
+    copy(ROUTES_JSON, ROUTES_BAK);
+  }
 
-    // アトミック書き込み（一時ファイル + rename）
-    $tmpFile = ROUTES_JSON . '.tmp.' . getmypid();
-    file_put_contents($tmpFile, $json, LOCK_EX);
-    rename($tmpFile, ROUTES_JSON);
+  // アトミック書き込み（一時ファイル + rename）
+  $tmpFile = ROUTES_JSON . ".tmp." . getmypid();
+  file_put_contents($tmpFile, $json, LOCK_EX);
+  rename($tmpFile, ROUTES_JSON);
 
-    // routes.conf 再生成
-    $routesConf = generateRoutesConf($state);
-    atomicWrite(ROUTES_CONF, $routesConf);
+  // routes.conf 再生成
+  $routesConf = generateRoutesConf($state);
+  atomicWrite(ROUTES_CONF, $routesConf);
 
-    // routes-ssl.conf 再生成
-    $sslConf = generateRoutesSslConf($state);
-    atomicWrite(ROUTES_SSL_CONF, $sslConf);
+  // routes-ssl.conf 再生成
+  $sslConf = generateRoutesSslConf($state);
+  atomicWrite(ROUTES_SSL_CONF, $sslConf);
 
-    // Apache graceful restart
-    triggerGracefulRestart();
+  // Apache graceful restart
+  triggerGracefulRestart();
 }
 
 /**
@@ -145,9 +145,9 @@ function saveState(array $state): void {
  * @return void
  */
 function atomicWrite(string $path, string $content): void {
-    $tmpFile = $path . '.tmp.' . getmypid();
-    file_put_contents($tmpFile, $content, LOCK_EX);
-    rename($tmpFile, $path);
+  $tmpFile = $path . ".tmp." . getmypid();
+  file_put_contents($tmpFile, $content, LOCK_EX);
+  rename($tmpFile, $path);
 }
 
 /**
@@ -162,31 +162,31 @@ function atomicWrite(string $path, string $content): void {
  * @return string routes.conf のテキスト内容
  */
 function generateRoutesConf(array $state): string {
-    $lines = ['# 自動生成 — 手動編集禁止', ''];
-    $domains = array_column($state['baseDomains'], 'domain');
-    $resolvedRoutes = resolveAllRoutes($state);
+  $lines = ["# 自動生成 — 手動編集禁止", ""];
+  $domains = array_column($state["baseDomains"], "domain");
+  $resolvedRoutes = resolveAllRoutes($state);
 
-    // 1. ベースドメイン → 管理UIへリダイレクト
-    foreach ($domains as $domain) {
-        $lines[] = '# --- ベースドメイン → 管理UIへリダイレクト ---';
-        $lines[] = '<VirtualHost *:80>';
-        $lines[] = "    ServerName {$domain}";
-        $lines[] = '    RewriteEngine On';
-        $lines[] = '    RewriteRule ^ http://localhost [R=302,L]';
-        $lines[] = '</VirtualHost>';
-        $lines[] = '';
+  // 1. ベースドメイン → 管理UIへリダイレクト
+  foreach($domains as $domain) {
+    $lines[] = "# --- ベースドメイン → 管理UIへリダイレクト ---";
+    $lines[] = "<VirtualHost *:80>";
+    $lines[] = "    ServerName {$domain}";
+    $lines[] = "    RewriteEngine On";
+    $lines[] = "    RewriteRule ^ http://localhost [R=302,L]";
+    $lines[] = "</VirtualHost>";
+    $lines[] = "";
+  }
+
+  // 2. 解決済みルートから VirtualHost 生成
+  foreach($resolvedRoutes as $route) {
+    foreach($domains as $domain) {
+      $serverName = "{$route["slug"]}.{$domain}";
+      $lines = array_merge($lines, generateHttpVirtualHost($serverName, $route));
+      $lines[] = "";
     }
+  }
 
-    // 2. 解決済みルートから VirtualHost 生成
-    foreach ($resolvedRoutes as $route) {
-        foreach ($domains as $domain) {
-            $serverName = "{$route['slug']}.{$domain}";
-            $lines = array_merge($lines, generateHttpVirtualHost($serverName, $route));
-            $lines[] = '';
-        }
-    }
-
-    return implode("\n", $lines);
+  return implode("\n", $lines);
 }
 
 /**
@@ -197,47 +197,47 @@ function generateRoutesConf(array $state): string {
  * @return string routes-ssl.conf のテキスト内容
  */
 function generateRoutesSslConf(array $state): string {
-    $lines = ['# 自動生成 — 手動編集禁止', ''];
+  $lines = ["# 自動生成 — 手動編集禁止", ""];
 
-    // SSL が有効なベースドメインを抽出
-    $sslDomains = [];
-    foreach ($state['baseDomains'] as $bd) {
-        if (!empty($bd['ssl'])) {
-            $sslDomains[] = $bd['domain'];
-        }
+  // SSL が有効なベースドメインを抽出
+  $sslDomains = [];
+  foreach($state["baseDomains"] as $bd) {
+    if(!empty($bd["ssl"])) {
+      $sslDomains[] = $bd["domain"];
     }
+  }
 
-    // SSL 有効ドメインがない場合は空ファイル
-    if (empty($sslDomains)) {
-        return implode("\n", $lines);
-    }
-
-    $resolvedRoutes = resolveAllRoutes($state);
-
-    // ベースドメイン → 管理UIへリダイレクト
-    foreach ($sslDomains as $domain) {
-        $lines[] = '# --- ベースドメイン → 管理UIへリダイレクト ---';
-        $lines[] = '<VirtualHost *:443>';
-        $lines[] = "    ServerName {$domain}";
-        $lines[] = '    SSLEngine on';
-        $lines[] = '    SSLCertificateFile ' . ROUTER_HOME . '/ssl/cert.pem';
-        $lines[] = '    SSLCertificateKeyFile ' . ROUTER_HOME . '/ssl/key.pem';
-        $lines[] = '    RewriteEngine On';
-        $lines[] = '    RewriteRule ^ https://localhost [R=302,L]';
-        $lines[] = '</VirtualHost>';
-        $lines[] = '';
-    }
-
-    // 解決済みルートから HTTPS VirtualHost 生成
-    foreach ($resolvedRoutes as $route) {
-        foreach ($sslDomains as $domain) {
-            $serverName = "{$route['slug']}.{$domain}";
-            $lines = array_merge($lines, generateHttpsVirtualHost($serverName, $route));
-            $lines[] = '';
-        }
-    }
-
+  // SSL 有効ドメインがない場合は空ファイル
+  if(empty($sslDomains)) {
     return implode("\n", $lines);
+  }
+
+  $resolvedRoutes = resolveAllRoutes($state);
+
+  // ベースドメイン → 管理UIへリダイレクト
+  foreach($sslDomains as $domain) {
+    $lines[] = "# --- ベースドメイン → 管理UIへリダイレクト ---";
+    $lines[] = "<VirtualHost *:443>";
+    $lines[] = "    ServerName {$domain}";
+    $lines[] = "    SSLEngine on";
+    $lines[] = "    SSLCertificateFile " . ROUTER_HOME . "/ssl/cert.pem";
+    $lines[] = "    SSLCertificateKeyFile " . ROUTER_HOME . "/ssl/key.pem";
+    $lines[] = "    RewriteEngine On";
+    $lines[] = "    RewriteRule ^ https://localhost [R=302,L]";
+    $lines[] = "</VirtualHost>";
+    $lines[] = "";
+  }
+
+  // 解決済みルートから HTTPS VirtualHost 生成
+  foreach($resolvedRoutes as $route) {
+    foreach($sslDomains as $domain) {
+      $serverName = "{$route["slug"]}.{$domain}";
+      $lines = array_merge($lines, generateHttpsVirtualHost($serverName, $route));
+      $lines[] = "";
+    }
+  }
+
+  return implode("\n", $lines);
 }
 
 /**
@@ -248,42 +248,42 @@ function generateRoutesSslConf(array $state): string {
  * @return array [['slug' => string, 'target' => string, 'type' => string], ...]
  */
 function resolveAllRoutes(array $state): array {
-    $resolved = [];
-    $usedSlugs = [];
+  $resolved = [];
+  $usedSlugs = [];
 
-    // 明示登録（routes）
-    foreach ($state['routes'] as $route) {
-        $slug = $route['slug'];
-        $usedSlugs[$slug] = true;
-        $resolved[] = [
-            'slug'   => $slug,
-            'target' => $route['target'],
-            'type'   => $route['type'],
-        ];
+  // 明示登録（routes）
+  foreach($state["routes"] as $route) {
+    $slug = $route["slug"];
+    $usedSlugs[$slug] = true;
+    $resolved[] = [
+      "slug"   => $slug,
+      "target" => $route["target"],
+      "type"   => $route["type"],
+    ];
+  }
+
+  // グループ解決（登録順走査、先にマッチしたグループ優先）
+  foreach($state["groups"] as $group) {
+    $path = $group["path"];
+    if(!is_dir($path)) {
+      continue;
     }
-
-    // グループ解決（登録順走査、先にマッチしたグループ優先）
-    foreach ($state['groups'] as $group) {
-        $path = $group['path'];
-        if (!is_dir($path)) {
-            continue;
-        }
-        $entries = scanGroupDirectory($path);
-        foreach ($entries as $entry) {
-            $slug = $entry['slug'];
-            if (isset($usedSlugs[$slug])) {
-                continue;
-            }
-            $usedSlugs[$slug] = true;
-            $resolved[] = [
-                'slug'   => $slug,
-                'target' => $entry['target'],
-                'type'   => 'directory',
-            ];
-        }
+    $entries = scanGroupDirectory($path);
+    foreach($entries as $entry) {
+      $slug = $entry["slug"];
+      if(isset($usedSlugs[$slug])) {
+        continue;
+      }
+      $usedSlugs[$slug] = true;
+      $resolved[] = [
+        "slug"   => $slug,
+        "target" => $entry["target"],
+        "type"   => "directory",
+      ];
     }
+  }
 
-    return $resolved;
+  return $resolved;
 }
 
 /**
@@ -294,51 +294,51 @@ function resolveAllRoutes(array $state): array {
  * @return array Apache 設定の行配列
  */
 function generateHttpVirtualHost(string $serverName, array $route): array {
-    $type = $route['type'];
-    $target = $route['target'];
+  $type = $route["type"];
+  $target = $route["target"];
 
-    if ($type === 'directory') {
-        return [
-            '# --- ディレクトリ公開 ---',
-            '<VirtualHost *:80>',
-            "    ServerName {$serverName}",
-            "    DocumentRoot {$target}",
-            "    <Directory {$target}>",
-            '        Options FollowSymLinks Indexes',
-            '        AllowOverride All',
-            '        Require all granted',
-            '    </Directory>',
-            '    DirectoryIndex index.php index.html index.htm',
-            '</VirtualHost>',
-        ];
-    }
+  if($type === "directory") {
+    return [
+      "# --- ディレクトリ公開 ---",
+      "<VirtualHost *:80>",
+      "    ServerName {$serverName}",
+      "    DocumentRoot {$target}",
+      "    <Directory {$target}>",
+      "        Options FollowSymLinks Indexes",
+      "        AllowOverride All",
+      "        Require all granted",
+      "    </Directory>",
+      "    DirectoryIndex index.php index.html index.htm",
+      "</VirtualHost>",
+    ];
+  }
 
-    if ($type === 'proxy') {
-        $parsed = parse_url($target);
-        $port = $parsed['port'] ?? ($parsed['scheme'] === 'https' ? 443 : 80);
-        $wsScheme = $parsed['scheme'] === 'https' ? 'wss' : 'ws';
-        $host = $parsed['host'] ?? 'localhost';
-        $wsTarget = "{$wsScheme}://{$host}:{$port}";
+  if($type === "proxy") {
+    $parsed = parse_url($target);
+    $port = $parsed["port"] ?? ($parsed["scheme"] === "https" ? 443 : 80);
+    $wsScheme = $parsed["scheme"] === "https" ? "wss" : "ws";
+    $host = $parsed["host"] ?? "localhost";
+    $wsTarget = "{$wsScheme}://{$host}:{$port}";
 
-        return [
-            '# --- リバースプロキシ（WebSocket 対応）---',
-            '<IfModule mod_proxy.c>',
-            '<VirtualHost *:80>',
-            "    ServerName {$serverName}",
-            '    ProxyPreserveHost On',
-            '    RewriteEngine On',
-            '    RewriteCond %{HTTP:Upgrade} =websocket [NC]',
-            "    RewriteRule ^(.*)\$ {$wsTarget}\$1 [P,L]",
-            "    ProxyPass / {$target}/",
-            "    ProxyPassReverse / {$target}/",
-            '    RequestHeader set X-Forwarded-Proto "http"',
-            '</VirtualHost>',
-            '</IfModule>',
-        ];
-    }
+    return [
+      "# --- リバースプロキシ（WebSocket 対応）---",
+      "<IfModule mod_proxy.c>",
+      "<VirtualHost *:80>",
+      "    ServerName {$serverName}",
+      "    ProxyPreserveHost On",
+      "    RewriteEngine On",
+      "    RewriteCond %{HTTP:Upgrade} =websocket [NC]",
+      "    RewriteRule ^(.*)\$ {$wsTarget}\$1 [P,L]",
+      "    ProxyPass / {$target}/",
+      "    ProxyPassReverse / {$target}/",
+      "    RequestHeader set X-Forwarded-Proto \"http\"",
+      "</VirtualHost>",
+      "</IfModule>",
+    ];
+  }
 
-    // 不明な type はスキップ
-    return [];
+  // 不明な type はスキップ
+  return [];
 }
 
 /**
@@ -349,56 +349,56 @@ function generateHttpVirtualHost(string $serverName, array $route): array {
  * @return array Apache 設定の行配列
  */
 function generateHttpsVirtualHost(string $serverName, array $route): array {
-    $type = $route['type'];
-    $target = $route['target'];
-    $sslLines = [
-        '    SSLEngine on',
-        '    SSLCertificateFile ' . ROUTER_HOME . '/ssl/cert.pem',
-        '    SSLCertificateKeyFile ' . ROUTER_HOME . '/ssl/key.pem',
+  $type = $route["type"];
+  $target = $route["target"];
+  $sslLines = [
+    "    SSLEngine on",
+    "    SSLCertificateFile " . ROUTER_HOME . "/ssl/cert.pem",
+    "    SSLCertificateKeyFile " . ROUTER_HOME . "/ssl/key.pem",
+  ];
+
+  if($type === "directory") {
+    return [
+      "# --- ディレクトリ公開 ---",
+      "<VirtualHost *:443>",
+      "    ServerName {$serverName}",
+      ...$sslLines,
+      "    DocumentRoot {$target}",
+      "    <Directory {$target}>",
+      "        Options FollowSymLinks Indexes",
+      "        AllowOverride All",
+      "        Require all granted",
+      "    </Directory>",
+      "    DirectoryIndex index.php index.html index.htm",
+      "</VirtualHost>",
     ];
+  }
 
-    if ($type === 'directory') {
-        return [
-            '# --- ディレクトリ公開 ---',
-            '<VirtualHost *:443>',
-            "    ServerName {$serverName}",
-            ...$sslLines,
-            "    DocumentRoot {$target}",
-            "    <Directory {$target}>",
-            '        Options FollowSymLinks Indexes',
-            '        AllowOverride All',
-            '        Require all granted',
-            '    </Directory>',
-            '    DirectoryIndex index.php index.html index.htm',
-            '</VirtualHost>',
-        ];
-    }
+  if($type === "proxy") {
+    $parsed = parse_url($target);
+    $port = $parsed["port"] ?? ($parsed["scheme"] === "https" ? 443 : 80);
+    $host = $parsed["host"] ?? "localhost";
+    $wsTarget = "wss://{$host}:{$port}";
 
-    if ($type === 'proxy') {
-        $parsed = parse_url($target);
-        $port = $parsed['port'] ?? ($parsed['scheme'] === 'https' ? 443 : 80);
-        $host = $parsed['host'] ?? 'localhost';
-        $wsTarget = "wss://{$host}:{$port}";
+    return [
+      "# --- リバースプロキシ（WebSocket 対応）---",
+      "<IfModule mod_proxy.c>",
+      "<VirtualHost *:443>",
+      "    ServerName {$serverName}",
+      ...$sslLines,
+      "    ProxyPreserveHost On",
+      "    RewriteEngine On",
+      "    RewriteCond %{HTTP:Upgrade} =websocket [NC]",
+      "    RewriteRule ^(.*)\$ {$wsTarget}\$1 [P,L]",
+      "    ProxyPass / {$target}/",
+      "    ProxyPassReverse / {$target}/",
+      "    RequestHeader set X-Forwarded-Proto \"https\"",
+      "</VirtualHost>",
+      "</IfModule>",
+    ];
+  }
 
-        return [
-            '# --- リバースプロキシ（WebSocket 対応）---',
-            '<IfModule mod_proxy.c>',
-            '<VirtualHost *:443>',
-            "    ServerName {$serverName}",
-            ...$sslLines,
-            '    ProxyPreserveHost On',
-            '    RewriteEngine On',
-            '    RewriteCond %{HTTP:Upgrade} =websocket [NC]',
-            "    RewriteRule ^(.*)\$ {$wsTarget}\$1 [P,L]",
-            "    ProxyPass / {$target}/",
-            "    ProxyPassReverse / {$target}/",
-            '    RequestHeader set X-Forwarded-Proto "https"',
-            '</VirtualHost>',
-            '</IfModule>',
-        ];
-    }
-
-    return [];
+  return [];
 }
 
 /**
@@ -413,15 +413,15 @@ function generateHttpsVirtualHost(string $serverName, array $route): array {
  * @return void
  */
 function triggerGracefulRestart(): void {
-    $script = ROUTER_HOME . '/bin/graceful.sh';
+  $script = ROUTER_HOME . "/bin/graceful.sh";
 
-    if (!file_exists($script)) {
-        return;
-    }
+  if(!file_exists($script)) {
+    return;
+  }
 
-    // フルパスで sudo を実行（Apache 環境の PATH 問題を回避）
-    $cmd = "/usr/bin/sudo -n " . escapeshellarg($script) . " 2>&1";
-    exec($cmd, $output, $exitCode);
+  // フルパスで sudo を実行（Apache 環境の PATH 問題を回避）
+  $cmd = "/usr/bin/sudo -n " . escapeshellarg($script) . " 2>&1";
+  exec($cmd, $output, $exitCode);
 }
 
 /**
@@ -432,8 +432,8 @@ function triggerGracefulRestart(): void {
  * @return array [['slug' => string, 'target' => string], ...]
  */
 function scanGroupDirectory(string $groupPath): array {
-    $result = scanGroupDirectoryFull($groupPath);
-    return $result['valid'];
+  $result = scanGroupDirectoryFull($groupPath);
+  return $result["valid"];
 }
 
 /**
@@ -444,49 +444,49 @@ function scanGroupDirectory(string $groupPath): array {
  * @return array ['valid' => [...], 'skipped' => [...]]
  */
 function scanGroupDirectoryFull(string $groupPath): array {
-    $valid = [];
-    $skipped = [];
+  $valid = [];
+  $skipped = [];
 
-    $items = @scandir($groupPath);
-    if ($items === false) {
-        return ['valid' => [], 'skipped' => []];
+  $items = @scandir($groupPath);
+  if($items === false) {
+    return ["valid" => [], "skipped" => []];
+  }
+
+  foreach($items as $item) {
+    // . と .. をスキップ
+    if($item === "." || $item === "..") {
+      continue;
     }
 
-    foreach ($items as $item) {
-        // . と .. をスキップ
-        if ($item === '.' || $item === '..') {
-            continue;
-        }
+    $fullPath = $groupPath . "/" . $item;
 
-        $fullPath = $groupPath . '/' . $item;
-
-        // ディレクトリのみ対象
-        if (!is_dir($fullPath)) {
-            continue;
-        }
-
-        // スラグパターン一致チェック
-        if (!preg_match(SLUG_PATTERN, $item)) {
-            $skipped[] = [
-                'name'   => $item,
-                'reason' => 'スラグパターンに一致しません（英小文字・数字・ハイフンのみ使用可）',
-            ];
-            continue;
-        }
-
-        // public/ 自動検出: public/ があればそちらを DocumentRoot
-        $target = $fullPath;
-        if (is_dir($fullPath . '/public')) {
-            $target = $fullPath . '/public';
-        }
-
-        $valid[] = [
-            'slug'   => $item,
-            'target' => $target,
-        ];
+    // ディレクトリのみ対象
+    if(!is_dir($fullPath)) {
+      continue;
     }
 
-    return ['valid' => $valid, 'skipped' => $skipped];
+    // スラグパターン一致チェック
+    if(!preg_match(SLUG_PATTERN, $item)) {
+      $skipped[] = [
+        "name"   => $item,
+        "reason" => "スラグパターンに一致しません（英小文字・数字・ハイフンのみ使用可）",
+      ];
+      continue;
+    }
+
+    // public/ 自動検出: public/ があればそちらを DocumentRoot
+    $target = $fullPath;
+    if(is_dir($fullPath . "/public")) {
+      $target = $fullPath . "/public";
+    }
+
+    $valid[] = [
+      "slug"   => $item,
+      "target" => $target,
+    ];
+  }
+
+  return ["valid" => $valid, "skipped" => $skipped];
 }
 
 /**
@@ -496,10 +496,10 @@ function scanGroupDirectoryFull(string $groupPath): array {
  * @param int $statusCode HTTP ステータスコード
  */
 function jsonResponse($data, int $statusCode = 200): void {
-    http_response_code($statusCode);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
-    exit;
+  http_response_code($statusCode);
+  header("Content-Type: application/json; charset=utf-8");
+  echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+  exit;
 }
 
 /**
@@ -509,7 +509,79 @@ function jsonResponse($data, int $statusCode = 200): void {
  * @param int $statusCode HTTP ステータスコード
  */
 function errorResponse(string $message, int $statusCode = 400): void {
-    jsonResponse(['error' => $message], $statusCode);
+  jsonResponse(["error" => $message], $statusCode);
+}
+
+/**
+ * conf/env.conf からユーザのホームディレクトリを取得する。
+ * 取得できない場合は null を返す。
+ *
+ * @return string|null ホームディレクトリのパス
+ */
+function getUserHome(): ?string {
+  $envConf = ROUTER_HOME . "/conf/env.conf";
+  if(!file_exists($envConf)) {
+    return null;
+  }
+
+  $lines = file($envConf, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+  foreach($lines as $line) {
+    $line = trim($line);
+    if(str_starts_with($line, "#")) continue;
+    if(str_starts_with($line, "USER_HOME=")) {
+      return substr($line, strlen("USER_HOME="));
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 指定ディレクトリのサブディレクトリ一覧を返す。
+ * ファイルは除外し、ディレクトリのみ返す。
+ *
+ * @param string $dir           スキャン対象ディレクトリ
+ * @param string $prefix        名前のプレフィックスフィルタ（部分入力時）
+ * @param bool   $showDot       ドットディレクトリを含めるか
+ * @param array  $rootBlacklist ルート直下の除外ディレクトリ名
+ * @return array ディレクトリ名の配列
+ */
+function listSubdirs(string $dir, string $prefix, bool $showDot, array $rootBlacklist): array {
+  $items = @scandir($dir);
+  if($items === false) {
+    return [];
+  }
+
+  $isRoot = ($dir === "/");
+  $dirs = [];
+
+  foreach($items as $item) {
+    if($item === "." || $item === "..") {
+      continue;
+    }
+
+    if(!$showDot && str_starts_with($item, ".")) {
+      continue;
+    }
+
+    if($isRoot && in_array($item, $rootBlacklist, true)) {
+      continue;
+    }
+
+    if($prefix !== "" && !str_starts_with(strtolower($item), strtolower($prefix))) {
+      continue;
+    }
+
+    $fullPath = $dir === "/" ? "/{$item}" : "{$dir}/{$item}";
+    if(!is_dir($fullPath)) {
+      continue;
+    }
+
+    $dirs[] = $item;
+  }
+
+  sort($dirs, SORT_STRING | SORT_FLAG_CASE);
+  return $dirs;
 }
 
 /**
@@ -520,48 +592,48 @@ function errorResponse(string $message, int $statusCode = 400): void {
  * @return array グループ情報の配列
  */
 function buildGroupsInfo(array $state): array {
-    $groupsInfo = [];
-    $seenSlugs = [];
+  $groupsInfo = [];
+  $seenSlugs = [];
 
-    // 明示登録スラグを先に収集
-    foreach ($state['routes'] as $route) {
-        $seenSlugs[$route['slug']] = ['type' => 'explicit'];
+  // 明示登録スラグを先に収集
+  foreach($state["routes"] as $route) {
+    $seenSlugs[$route["slug"]] = ["type" => "explicit"];
+  }
+
+  foreach($state["groups"] as $group) {
+    $path = $group["path"];
+    $scanResult = is_dir($path) ? scanGroupDirectoryFull($path) : ["valid" => [], "skipped" => []];
+    $subdirs = [];
+
+    foreach($scanResult["valid"] as $entry) {
+      $slug = $entry["slug"];
+      $status = "active";
+      $conflictWith = null;
+
+      if(isset($seenSlugs[$slug])) {
+        $status = "shadowed";
+        $conflictWith = $seenSlugs[$slug]["type"] === "explicit"
+          ? "明示登録"
+          : $seenSlugs[$slug]["group"];
+      } else {
+        $seenSlugs[$slug] = ["type" => "group", "group" => $path];
+      }
+
+      $subdirs[] = [
+        "slug"         => $slug,
+        "target"       => $entry["target"],
+        "status"       => $status,
+        "conflictWith" => $conflictWith,
+      ];
     }
 
-    foreach ($state['groups'] as $group) {
-        $path = $group['path'];
-        $scanResult = is_dir($path) ? scanGroupDirectoryFull($path) : ['valid' => [], 'skipped' => []];
-        $subdirs = [];
+    $groupsInfo[] = [
+      "path"    => $path,
+      "exists"  => is_dir($path),
+      "subdirs" => $subdirs,
+      "skipped" => $scanResult["skipped"],
+    ];
+  }
 
-        foreach ($scanResult['valid'] as $entry) {
-            $slug = $entry['slug'];
-            $status = 'active';
-            $conflictWith = null;
-
-            if (isset($seenSlugs[$slug])) {
-                $status = 'shadowed';
-                $conflictWith = $seenSlugs[$slug]['type'] === 'explicit'
-                    ? '明示登録'
-                    : $seenSlugs[$slug]['group'];
-            } else {
-                $seenSlugs[$slug] = ['type' => 'group', 'group' => $path];
-            }
-
-            $subdirs[] = [
-                'slug'         => $slug,
-                'target'       => $entry['target'],
-                'status'       => $status,
-                'conflictWith' => $conflictWith,
-            ];
-        }
-
-        $groupsInfo[] = [
-            'path'    => $path,
-            'exists'  => is_dir($path),
-            'subdirs' => $subdirs,
-            'skipped' => $scanResult['skipped'],
-        ];
-    }
-
-    return $groupsInfo;
+  return $groupsInfo;
 }

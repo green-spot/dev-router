@@ -95,11 +95,17 @@ else
     fi
 fi
 
+# ログインユーザのホームディレクトリを取得
+LOGIN_USER="${SUDO_USER:-$(whoami)}"
+USER_HOME=$(eval echo "~${LOGIN_USER}")
+info "ログインユーザ: ${LOGIN_USER}（ホーム: ${USER_HOME}）"
+
 # env.conf 生成
 if [[ -n "${HTTPD_BIN}" ]]; then
     cat > "${ENV_CONF}" <<EOF
 # Apache 環境設定（setup.sh が自動生成）
 HTTPD_BIN=${HTTPD_BIN}
+USER_HOME=${USER_HOME}
 EOF
     ok "env.conf を生成しました: ${ENV_CONF}"
 else

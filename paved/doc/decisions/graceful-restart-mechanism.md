@@ -2,8 +2,8 @@
 title: "Graceful Restart 機構の選定"
 description: "PHP から Apache graceful restart を実行する方式として、sudoers + 専用ラッパースクリプト方式を採用した判断理由"
 status: "draft"
-created_at: "2026-02-26"
-updated_at: "2026-02-26"
+created_at: "2026-02-26 00:00:00"
+updated_at: "2026-02-26 00:00:00"
 refs:
   - "design/architecture.md"
   - "decisions/rewritemap-to-vhost.md"

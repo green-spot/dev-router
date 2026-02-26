@@ -2,8 +2,8 @@
 title: "機能仕様"
 description: "DevRouter が提供する各機能の仕様と操作フローをまとめる"
 status: "draft"
-created_at: "2026-02-25"
-updated_at: "2026-02-26"
+created_at: "2026-02-25 00:00:00"
+updated_at: "2026-02-26 00:00:00"
 refs:
   - "requirements/overview.md"
   - "design/architecture.md"

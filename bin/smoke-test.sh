@@ -2,8 +2,8 @@
 set -uo pipefail
 
 # DevRouter スモークテスト
-# 使い方: bash smoke-test.sh
-#         ROUTER_HOME=/path bash smoke-test.sh
+# 使い方: bash bin/smoke-test.sh
+#         ROUTER_HOME=/path bash bin/smoke-test.sh
 
 ROUTER_HOME="${ROUTER_HOME:-/opt/dev-router}"
 
@@ -40,12 +40,16 @@ echo "ファイル配置:"
 
 for f in \
     "conf/vhost-http.conf" \
+    "conf/vhost-https.conf" \
+    "conf/env.conf" \
+    "bin/graceful.sh" \
     "data/routes.json" \
     "data/routes.conf" \
     "data/routes-ssl.conf" \
     "public/index.html" \
     "public/default/index.html" \
-    "public/api/health.php"; do
+    "public/api/.htaccess" \
+    "public/api/index.php"; do
     if [[ -f "${ROUTER_HOME}/${f}" ]]; then
         check "$f" "ok"
     else
@@ -81,7 +85,7 @@ else
 fi
 
 # 2. API ヘルスチェック
-health=$(curl -s http://localhost/api/health.php 2>/dev/null)
+health=$(curl -s http://localhost/api/health 2>/dev/null)
 if echo "$health" | grep -q '"status".*"ok"'; then
     check "API ヘルスチェック" "ok"
 else
@@ -89,7 +93,7 @@ else
 fi
 
 # 3. 環境チェック API
-env_check=$(curl -s http://localhost/api/env-check.php 2>/dev/null)
+env_check=$(curl -s http://localhost/api/env-check 2>/dev/null)
 if echo "$env_check" | grep -q '"checks"'; then
     missing=$(echo "$env_check" | grep -o '"status":"missing"' | head -1)
     if [[ -z "$missing" ]]; then

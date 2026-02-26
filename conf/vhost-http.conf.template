@@ -1,9 +1,10 @@
 # DevRouter — HTTP VirtualHost 設定
 # セットアップスクリプトが ${ROUTER_HOME} を実パスに置換して配置する
 
-# デフォルト VirtualHost（名前ベース VirtualHost のフォールバック）
-# 最初に定義された VirtualHost がデフォルトになる
+# デフォルト VirtualHost（未登録サブドメインのフォールバック）
+# グローバル ServerName との衝突を避けるため明示的に ServerName を設定する
 <VirtualHost *:80>
+    ServerName devrouter-fallback.internal
     DocumentRoot ${ROUTER_HOME}/public/default
     <Directory ${ROUTER_HOME}/public/default>
         Require all granted

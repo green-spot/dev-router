@@ -2,8 +2,8 @@
 title: "RewriteMap 廃止 → VirtualHost 生成方式への移行"
 description: "RewriteMap txt: + 単一 VirtualHost 方式の限界と、サブドメインごとの VirtualHost 生成方式を採用した判断理由"
 status: "draft"
-created_at: "2026-02-25"
-updated_at: "2026-02-25"
+created_at: "2026-02-25 00:00:00"
+updated_at: "2026-02-26 00:00:00"
 refs:
   - "design/architecture.md"
   - "decisions/node-vs-php.md"

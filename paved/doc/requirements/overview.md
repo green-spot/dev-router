@@ -2,9 +2,10 @@
 title: "要件概要"
 description: "DevRouter の背景・目的・解決する課題・ゴール・動作環境・技術スタックをまとめる"
 status: "draft"
-created_at: "2026-02-25"
-updated_at: "2026-02-25"
-refs: []
+created_at: "2026-02-25 00:00:00"
+updated_at: "2026-02-26 00:00:00"
+refs:
+  - "decisions/index.md"
 ---
 
 # 要件概要

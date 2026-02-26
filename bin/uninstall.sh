@@ -5,8 +5,8 @@ set -euo pipefail
 # ROUTER_HOME を削除する。Apache 設定の除去はユーザーが行う。
 #
 # 使い方:
-#   sudo bash uninstall.sh
-#   ROUTER_HOME=/path sudo bash uninstall.sh
+#   sudo bash bin/uninstall.sh
+#   ROUTER_HOME=/path sudo bash bin/uninstall.sh
 
 ROUTER_HOME="${ROUTER_HOME:-/opt/dev-router}"
 

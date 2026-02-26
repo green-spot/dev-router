@@ -62,10 +62,14 @@
       <div class="body">
         <form data-js-add-group-form>
           <div class="group">
-            <label>
-              <span>ディレクトリパス</span>
-              <input type="text" name="path" required placeholder="/Users/me/sites/company">
-            </label>
+            <label for="group-path">ディレクトリパス</label>
+            <div class="dir-autocomplete">
+              <div class="dir-autocomplete-input-row">
+                <input type="text" id="group-path" name="path" required placeholder="/Users/me/sites/company" autocomplete="off" spellcheck="false">
+                <button type="button" class="dir-autocomplete-dot-toggle" data-js-dot-toggle aria-pressed="false" title="隠しディレクトリを表示">.</button>
+              </div>
+              <div class="dir-autocomplete-dropdown" role="listbox"></div>
+            </div>
           </div>
           <button type="submit" class="btn primary">追加</button>
         </form>
@@ -97,10 +101,14 @@
             </label>
           </div>
           <div class="group">
-            <label>
-              <span>ターゲット</span>
-              <input type="text" name="target" required placeholder="/path/to/dir or http://localhost:3000">
-            </label>
+            <label for="route-target">ターゲット</label>
+            <div class="dir-autocomplete">
+              <div class="dir-autocomplete-input-row">
+                <input type="text" id="route-target" name="target" required placeholder="/Users/me/sites/myapp" autocomplete="off" spellcheck="false">
+                <button type="button" class="dir-autocomplete-dot-toggle" data-js-dot-toggle aria-pressed="false" title="隠しディレクトリを表示">.</button>
+              </div>
+              <div class="dir-autocomplete-dropdown" role="listbox"></div>
+            </div>
           </div>
           <div class="group auto">
             <label>

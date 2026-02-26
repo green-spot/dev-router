@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "pavemcp": {
-      "type": "http",
-      "url": "http://localhost:50103/mcp/a075af7d-32dd-4a4b-9d45-13034bb9d4fa"
-    }
-  }
-}
