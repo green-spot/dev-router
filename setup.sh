@@ -37,10 +37,19 @@ info "ファイルをデプロイ中..."
 rsync -a --delete "${SCRIPT_DIR}/public/" "${ROUTER_HOME}/public/"
 
 # conf/ — テンプレート内の ${ROUTER_HOME} を実パスに置換して配置
+# vhost-https.conf は証明書がないと Apache が起動エラーになるため別途処理する
 for tmpl in "${SCRIPT_DIR}"/conf/*.template; do
     name=$(basename "$tmpl" .template)
+    [[ "$name" == "vhost-https.conf" ]] && continue
     sed "s|\${ROUTER_HOME}|${ROUTER_HOME}|g" "$tmpl" > "${ROUTER_HOME}/conf/${name}"
 done
+
+# vhost-https.conf — 証明書があればテンプレートから生成、なければ空ファイル
+if [[ -f "${ROUTER_HOME}/ssl/cert.pem" ]]; then
+    sed "s|\${ROUTER_HOME}|${ROUTER_HOME}|g" "${SCRIPT_DIR}/conf/vhost-https.conf.template" > "${ROUTER_HOME}/conf/vhost-https.conf"
+else
+    echo "# SSL 有効化時に自動生成される" > "${ROUTER_HOME}/conf/vhost-https.conf"
+fi
 
 # data/ — 初期データ（既存があれば保持）
 if [[ ! -f "${ROUTER_HOME}/data/routes.json" ]]; then
@@ -53,9 +62,6 @@ fi
 # routes.conf / routes-ssl.conf — 存在しなければ空ファイルを作成
 [[ -f "${ROUTER_HOME}/data/routes.conf" ]]     || cp "${SCRIPT_DIR}/data/routes.conf" "${ROUTER_HOME}/data/routes.conf"
 [[ -f "${ROUTER_HOME}/data/routes-ssl.conf" ]] || cp "${SCRIPT_DIR}/data/routes-ssl.conf" "${ROUTER_HOME}/data/routes-ssl.conf"
-
-# data/ のパーミッション — Apache（PHP）から書き込めるようにする
-chmod -R 777 "${ROUTER_HOME}/data"
 
 ok "デプロイ完了"
 
@@ -113,6 +119,26 @@ else
     warn "後から setup.sh を再実行してください"
 fi
 
+# Apache ユーザが書き込むディレクトリのパーミッション設定
+# data/ — routes.json, routes.conf 等
+# ssl/  — mkcert で生成する証明書
+if [[ -n "${APACHE_USER}" ]]; then
+    chown -R "${APACHE_USER}" "${ROUTER_HOME}/data" "${ROUTER_HOME}/ssl"
+fi
+chmod -R 775 "${ROUTER_HOME}/data" "${ROUTER_HOME}/ssl"
+
+# conf/ — Apache ユーザが書き込む必要があるファイル（vhost-https.conf 等）のみ許可
+# env.conf は root 所有のままにし、graceful.sh が読み取るだけにする
+if [[ -n "${APACHE_USER}" ]]; then
+    chown -R "${APACHE_USER}" "${ROUTER_HOME}/conf"
+fi
+chmod -R 775 "${ROUTER_HOME}/conf"
+# env.conf は root 所有・書き込み不可に戻す（graceful.sh が root で実行するため読み取りのみで十分）
+if [[ -f "${ENV_CONF}" ]]; then
+    chown root "${ENV_CONF}"
+    chmod 644 "${ENV_CONF}"
+fi
+
 # --- 4. bin/graceful.sh デプロイ ---
 mkdir -p "${ROUTER_HOME}/bin"
 cp "${SCRIPT_DIR}/bin/graceful.sh" "${ROUTER_HOME}/bin/graceful.sh"
@@ -145,12 +171,10 @@ echo "  あとは Apache の httpd.conf に以下の1行を追加して再起動
 echo ""
 echo -e "    ${CYAN}Include ${ROUTER_HOME}/conf/vhost-http.conf${NC}"
 echo ""
-echo "  SSL を使う場合は追加で:"
-echo ""
-echo -e "    ${CYAN}Include ${ROUTER_HOME}/conf/vhost-https.conf${NC}"
+echo "  SSL は管理UIから有効化できます（httpd.conf の再編集は不要です）。"
 echo ""
 echo "  必須 Apache モジュール:"
-echo "    mod_rewrite, mod_headers"
+echo "    mod_rewrite, mod_headers, mod_vhost_alias"
 echo "  プロキシ機能を使う場合は追加で:"
 echo "    mod_proxy, mod_proxy_http, mod_proxy_wstunnel"
 echo "  SSL の場合は追加で:"

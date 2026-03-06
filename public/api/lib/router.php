@@ -11,6 +11,17 @@ function put($path, $fn)    { $GLOBALS["_routes"][] = ["PUT", $path, $fn]; }
 function delete($path, $fn) { $GLOBALS["_routes"][] = ["DELETE", $path, $fn]; }
 
 function dispatch() {
+  // CSRF 対策: クロスオリジンリクエストを拒否
+  $origin = $_SERVER["HTTP_ORIGIN"] ?? null;
+  if($origin !== null) {
+    $host = parse_url($origin, PHP_URL_HOST);
+    // parse_url 失敗時や許可リスト外のホストを拒否（IPv6 の括弧を除去して比較）
+    $normalizedHost = ($host !== null && $host !== false) ? trim($host, "[]") : null;
+    if($normalizedHost === null || !in_array($normalizedHost, ["localhost", "127.0.0.1", "::1"], true)) {
+      errorResponse("Forbidden", 403);
+    }
+  }
+
   $method = $_SERVER["REQUEST_METHOD"];
   $path = $_SERVER["PATH_INFO"] ?? "/";
 
@@ -27,14 +38,14 @@ function dispatch() {
 
 function jsonInput(): array {
   $input = json_decode(file_get_contents("php://input"), true);
-  if(!$input) {
+  if(!is_array($input)) {
     errorResponse("リクエストボディが不正です");
   }
   return $input;
 }
 
 function requireField(array $input, string $field): string {
-  if(empty($input[$field])) {
+  if(!isset($input[$field]) || $input[$field] === "") {
     errorResponse("{$field} は必須です");
   }
   return $input[$field];

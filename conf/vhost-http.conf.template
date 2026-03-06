@@ -30,3 +30,6 @@
 
 # 自動生成ルート
 Include ${ROUTER_HOME}/data/routes.conf
+
+# HTTPS（SSL 有効化時に自動展開される）
+Include ${ROUTER_HOME}/conf/vhost-https.conf

@@ -19,14 +19,17 @@ function getLoadedModules(): array {
     return array_map(fn($name) => preg_replace("/^mod_/", "", $name), apache_get_modules());
   }
 
+  $lines = [];
   exec("apachectl -M 2>/dev/null", $lines, $exitCode);
   if($exitCode !== 0) {
+    $lines = [];
     exec("httpd -M 2>/dev/null", $lines, $exitCode);
   }
 
   $modules = [];
   foreach($lines as $line) {
-    if(preg_match("/^\s*(\w+)_module/", $line, $m)) {
+    // モジュール名として有効な文字列のみ抽出（出力インジェクション防止）
+    if(preg_match("/^\s*([a-zA-Z0-9_]+)_module/", $line, $m)) {
       $modules[] = $m[1];
     }
   }
@@ -50,8 +53,8 @@ function checkMkcertForEnv(): array {
       "status"  => "missing",
       "command" => match($os) {
         "macos"         => "brew install mkcert && mkcert -install",
-        "linux", "wsl2" => "sudo apt install mkcert && mkcert -install",
-        default         => "mkcert をインストールしてください",
+        "linux", "wsl2" => "sudo apt install -y libnss3-tools && brew install mkcert && mkcert -install",
+        default         => "mkcert をインストールしてください（https://github.com/FiloSottile/mkcert）",
       },
     ];
   }

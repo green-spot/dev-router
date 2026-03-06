@@ -41,12 +41,14 @@ echo "ファイル配置:"
 for f in \
     "conf/vhost-http.conf" \
     "conf/vhost-https.conf" \
+    "conf/vhost-https.conf.template" \
     "conf/env.conf" \
     "bin/graceful.sh" \
     "data/routes.json" \
     "data/routes.conf" \
     "data/routes-ssl.conf" \
     "public/index.html" \
+    "public/js/alpine.min.js" \
     "public/default/index.html" \
     "public/api/.htaccess" \
     "public/api/index.php"; do
@@ -113,12 +115,20 @@ else
     check "ベースドメインリダイレクト" "fail" "HTTP ${redirect_code} (期待: 302)"
 fi
 
-# 5. 未登録サブドメイン → 404
+# 5. 未登録サブドメイン（1階層） → 404
 not_found_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: nonexistent.127.0.0.1.nip.io" http://127.0.0.1/ 2>/dev/null)
 if [[ "$not_found_code" == "404" ]]; then
-    check "未登録サブドメイン 404" "ok"
+    check "未登録サブドメイン 404（1階層）" "ok"
 else
-    check "未登録サブドメイン 404" "fail" "HTTP ${not_found_code} (期待: 404)"
+    check "未登録サブドメイン 404（1階層）" "fail" "HTTP ${not_found_code} (期待: 404)"
+fi
+
+# 6. 未登録サブドメイン（2階層） → 404
+not_found_2_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: nodir.nogroup.127.0.0.1.nip.io" http://127.0.0.1/ 2>/dev/null)
+if [[ "$not_found_2_code" == "404" ]]; then
+    check "未登録サブドメイン 404（2階層）" "ok"
+else
+    check "未登録サブドメイン 404（2階層）" "fail" "HTTP ${not_found_2_code} (期待: 404)"
 fi
 
 # 結果サマリー

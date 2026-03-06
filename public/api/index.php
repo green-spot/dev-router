@@ -22,10 +22,7 @@ get("/health", function() {
 
 get("/domains", function() {
   $result = loadState();
-  jsonResponse([
-    "baseDomains" => $result["state"]["baseDomains"],
-    "warning"     => $result["warning"],
-  ]);
+  jsonResponse(["baseDomains" => $result["state"]["baseDomains"]], 200, $result["warning"]);
 });
 
 post("/domains", function() {
@@ -49,6 +46,7 @@ post("/domains", function() {
     "ssl"     => false,
   ];
   saveState($state);
+  logInfo("ドメイン追加: {$domain}");
 
   jsonResponse(["baseDomains" => $state["baseDomains"]], 201);
 });
@@ -90,6 +88,7 @@ delete("/domains", function() {
 
   array_splice($state["baseDomains"], $index, 1);
   saveState($state);
+  logInfo("ドメイン削除: {$domain}");
   jsonResponse(["baseDomains" => $state["baseDomains"]]);
 });
 
@@ -99,15 +98,17 @@ delete("/domains", function() {
 
 get("/groups", function() {
   $result = loadState();
-  jsonResponse([
-    "groups"  => buildGroupsInfo($result["state"]),
-    "warning" => $result["warning"],
-  ]);
+  jsonResponse(["groups" => buildGroupsInfo($result["state"])], 200, $result["warning"]);
 });
 
 post("/groups", function() {
-  $path = rtrim(requireField(jsonInput(), "path"), "/");
+  $input = jsonInput();
+  $slug = strtolower(trim(requireField($input, "slug")));
+  $path = rtrim(requireField($input, "path"), "/");
 
+  if(!isValidGroupSlug($slug)) {
+    errorResponse("スラグは英小文字・数字・ハイフンのみ使用可能です（先頭と末尾はハイフン不可、63文字以内）");
+  }
   if(!is_dir($path)) {
     errorResponse("ディレクトリが存在しません: {$path}");
   }
@@ -115,54 +116,63 @@ post("/groups", function() {
   $state = loadState()["state"];
 
   foreach($state["groups"] as $group) {
+    if($group["slug"] === $slug) {
+      errorResponse("スラグ '{$slug}' は既に使用されています");
+    }
     if($group["path"] === $path) {
       errorResponse("グループ '{$path}' は既に登録されています");
     }
   }
 
-  $state["groups"][] = ["path" => $path];
+  $label = trim($input["label"] ?? "");
+  $state["groups"][] = ["slug" => $slug, "path" => $path, "ssl" => false, "label" => $label];
   saveState($state);
+  logInfo("グループ追加: slug={$slug}, path={$path}");
   jsonResponse(["groups" => buildGroupsInfo($state)], 201);
 });
 
 put("/groups", function() {
   $input = jsonInput();
   if(!isset($input["order"]) || !is_array($input["order"])) {
-    errorResponse("order（パスの配列）は必須です");
+    errorResponse("order（スラグの配列）は必須です");
   }
 
   $state = loadState()["state"];
-  $existingPaths = array_column($state["groups"], "path");
+  $groupBySlug = [];
+  foreach($state["groups"] as $group) {
+    $groupBySlug[$group["slug"]] = $group;
+  }
 
-  foreach($input["order"] as $path) {
-    if(!in_array($path, $existingPaths, true)) {
-      errorResponse("グループ '{$path}' は登録されていません");
+  foreach($input["order"] as $slug) {
+    if(!isset($groupBySlug[$slug])) {
+      errorResponse("グループ '{$slug}' は登録されていません");
     }
   }
-  if(count($input["order"]) !== count($existingPaths)) {
-    errorResponse("order には全てのグループパスを含めてください");
+  if(count($input["order"]) !== count($groupBySlug)) {
+    errorResponse("order には全てのグループスラグを含めてください");
   }
 
-  $state["groups"] = array_map(fn($path) => ["path" => $path], $input["order"]);
+  $state["groups"] = array_map(fn($slug) => $groupBySlug[$slug], $input["order"]);
   saveState($state);
   jsonResponse(["groups" => buildGroupsInfo($state)]);
 });
 
 delete("/groups", function() {
-  $path = rtrim(requireField(jsonInput(), "path"), "/");
+  $slug = strtolower(trim(requireField(jsonInput(), "slug")));
   $state = loadState()["state"];
 
   $index = null;
   foreach($state["groups"] as $i => $group) {
-    if($group["path"] === $path) { $index = $i; break; }
+    if($group["slug"] === $slug) { $index = $i; break; }
   }
 
   if($index === null) {
-    errorResponse("グループ '{$path}' は登録されていません", 404);
+    errorResponse("グループ '{$slug}' は登録されていません", 404);
   }
 
   array_splice($state["groups"], $index, 1);
   saveState($state);
+  logInfo("グループ削除: {$slug}");
   jsonResponse(["groups" => buildGroupsInfo($state)]);
 });
 
@@ -172,10 +182,7 @@ delete("/groups", function() {
 
 get("/routes", function() {
   $result = loadState();
-  jsonResponse([
-    "routes"  => $result["state"]["routes"],
-    "warning" => $result["warning"],
-  ]);
+  jsonResponse(["routes" => $result["state"]["routes"]], 200, $result["warning"]);
 });
 
 post("/routes", function() {
@@ -205,8 +212,10 @@ post("/routes", function() {
     }
   }
 
-  $state["routes"][] = ["slug" => $slug, "target" => $target, "type" => $type];
+  $label = trim($input["label"] ?? "");
+  $state["routes"][] = ["slug" => $slug, "target" => $target, "type" => $type, "label" => $label];
   saveState($state);
+  logInfo("ルート追加: slug={$slug}, type={$type}, target={$target}");
   jsonResponse(["routes" => $state["routes"]], 201);
 });
 
@@ -225,17 +234,8 @@ delete("/routes", function() {
 
   array_splice($state["routes"], $index, 1);
   saveState($state);
+  logInfo("ルート削除: {$slug}");
   jsonResponse(["routes" => $state["routes"]]);
-});
-
-// ============================================================
-//  スキャン
-// ============================================================
-
-post("/scan", function() {
-  $state = loadState()["state"];
-  saveState($state);
-  jsonResponse(["message" => "スキャン完了", "groups" => buildGroupsInfo($state)]);
 });
 
 // ============================================================
@@ -245,15 +245,19 @@ post("/scan", function() {
 get("/ssl", function() {
   $state = loadState()["state"];
 
+  $groups = array_map(fn($g) => ["slug" => $g["slug"], "ssl" => $g["ssl"]], $state["groups"]);
+
   jsonResponse([
     "mkcert"     => checkMkcertStatus(),
     "certExists" => file_exists(ROUTER_HOME . "/ssl/cert.pem") && file_exists(ROUTER_HOME . "/ssl/key.pem"),
     "domains"    => array_map(fn($bd) => ["domain" => $bd["domain"], "ssl" => $bd["ssl"]], $state["baseDomains"]),
+    "groups"     => $groups,
   ]);
 });
 
 post("/ssl", function() {
-  $domain = strtolower(trim(requireField(jsonInput(), "domain")));
+  $input = jsonInput();
+  $type = $input["type"] ?? "domain";
 
   $mkcert = checkMkcertStatus();
   if(!$mkcert["installed"])   errorResponse("mkcert がインストールされていません");
@@ -261,24 +265,44 @@ post("/ssl", function() {
 
   $state = loadState()["state"];
 
-  $found = false;
-  foreach($state["baseDomains"] as &$bd) {
-    if($bd["domain"] === $domain) { $bd["ssl"] = true; $found = true; }
+  if($type === "domain") {
+    // ベースドメインの SSL 有効化
+    $domain = strtolower(trim(requireField($input, "domain")));
+
+    $found = false;
+    foreach($state["baseDomains"] as &$bd) {
+      if($bd["domain"] === $domain) { $bd["ssl"] = true; $found = true; }
+    }
+    unset($bd);
+
+    if(!$found) {
+      errorResponse("ドメイン '{$domain}' は登録されていません", 404);
+    }
+  } elseif($type === "group") {
+    // グループの SSL 有効化
+    $slug = strtolower(trim(requireField($input, "slug")));
+
+    $found = false;
+    foreach($state["groups"] as &$group) {
+      if($group["slug"] === $slug) { $group["ssl"] = true; $found = true; }
+    }
+    unset($group);
+
+    if(!$found) {
+      errorResponse("グループ '{$slug}' は登録されていません", 404);
+    }
+  } else {
+    errorResponse("type は \"domain\" または \"group\" を指定してください");
   }
-  unset($bd);
 
-  if(!$found) {
-    errorResponse("ドメイン '{$domain}' は登録されていません", 404);
-  }
-
-  saveState($state);
-
-  $sans = array_map(fn($bd) => "*." . $bd["domain"], array_filter($state["baseDomains"], fn($bd) => $bd["ssl"]));
+  // 全 SANs を収集して証明書を生成
+  $sans = collectAllSans($state);
   if(empty($sans)) {
-    errorResponse("SSL が有効なベースドメインがありません");
+    errorResponse("SSL が有効なドメインまたはグループがありません");
   }
 
-  $cmd = "mkcert -cert-file " . escapeshellarg(ROUTER_HOME . "/ssl/cert.pem")
+  $mkcertBin = findMkcert();
+  $cmd = escapeshellarg($mkcertBin) . " -cert-file " . escapeshellarg(ROUTER_HOME . "/ssl/cert.pem")
        . " -key-file " . escapeshellarg(ROUTER_HOME . "/ssl/key.pem")
        . " " . implode(" ", array_map("escapeshellarg", $sans)) . " 2>&1";
 
@@ -287,10 +311,12 @@ post("/ssl", function() {
     errorResponse("証明書の発行に失敗しました: " . implode("\n", $output));
   }
 
-  $httpsDeployed = deployHttpsVhost();
+  saveState($state);
+  deployHttpsVhost();
   triggerGracefulRestart();
+  logInfo("SSL 証明書生成: " . implode(", ", $sans));
 
-  jsonResponse(["message" => "HTTPS を有効化しました", "sans" => $sans, "httpsDeployed" => $httpsDeployed]);
+  jsonResponse(["message" => "HTTPS を有効化しました", "sans" => $sans]);
 });
 
 // ============================================================
@@ -303,6 +329,11 @@ get("/browse-dirs", function() {
 
   $rootBlacklist = ["System", "bin", "sbin", "usr", "etc", "private", "dev", "proc", "tmp", "Library", "cores"];
   $userHome = getUserHome();
+
+  // パストラバーサル文字列の拒否（末尾 /.. と中間 ../ の両方を対象）
+  if(str_contains($path, "../") || str_contains($path, "/..")) {
+    errorResponse("パスに不正な文字列が含まれています");
+  }
 
   // パスが空の場合はホームディレクトリ情報のみ返す
   if($path === "") {
@@ -344,7 +375,7 @@ get("/env-check", function() {
   $checks = [];
 
   $moduleChecks = [
-    "required" => ["rewrite" => "mod_rewrite", "headers" => "mod_headers"],
+    "required" => ["rewrite" => "mod_rewrite", "headers" => "mod_headers", "vhost_alias" => "mod_vhost_alias"],
     "proxy"    => ["proxy" => "mod_proxy", "proxy_http" => "mod_proxy_http"],
     "websocket" => ["proxy_wstunnel" => "mod_proxy_wstunnel"],
     "ssl"      => ["ssl" => "mod_ssl"],

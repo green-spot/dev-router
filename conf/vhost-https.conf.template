@@ -1,6 +1,8 @@
 # DevRouter — HTTPS VirtualHost 設定（SSL 有効化時に追加）
 # ssl.php が ${ROUTER_HOME} を実パスに置換して配置する
 
+Listen 443
+
 # デフォルト VirtualHost（HTTPS）
 # グローバル ServerName との衝突を避けるため明示的に ServerName を設定する
 <VirtualHost *:443>

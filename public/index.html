@@ -5,73 +5,170 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DevRouter</title>
   <link rel="stylesheet" href="/css/style.css">
-  <script type="module" src="/js/app.js"></script>
+  <script src="/js/app.js"></script>
+  <script defer src="/js/alpine.min.js"></script>
 </head>
 <body>
 
 <header>
-  <h1>DevRouter</h1>
+  <h1><a href="#" x-data @click.prevent="$store.app.activeTab = 'dashboard'">DevRouter</a></h1>
+  <nav x-data="tabs()" @keydown="handleKeydown($event)">
+    <ul role="tablist" aria-label="管理メニュー">
+      <li><button type="button" role="tab" id="tab-groups"
+              aria-controls="panel-groups"
+              :aria-selected="isActive('groups') ? 'true' : 'false'"
+              :tabindex="isActive('groups') ? '0' : '-1'"
+              x-ref="tab_groups"
+              @click="activate('groups'); $el.focus()">グループ</button></li>
+      <li><button type="button" role="tab" id="tab-routes"
+              aria-controls="panel-routes"
+              :aria-selected="isActive('routes') ? 'true' : 'false'"
+              :tabindex="isActive('routes') ? '0' : '-1'"
+              x-ref="tab_routes"
+              @click="activate('routes'); $el.focus()">ルート</button></li>
+      <li><button type="button" role="tab" id="tab-domains"
+              aria-controls="panel-domains"
+              :aria-selected="isActive('domains') ? 'true' : 'false'"
+              :tabindex="isActive('domains') ? '0' : '-1'"
+              x-ref="tab_domains"
+              @click="activate('domains'); $el.focus()">ベースドメイン</button></li>
+      <li><button type="button" role="tab" id="tab-env"
+              aria-controls="panel-env"
+              :aria-selected="isActive('env') ? 'true' : 'false'"
+              :tabindex="isActive('env') ? '0' : '-1'"
+              x-ref="tab_env"
+              @click="activate('env'); $el.focus()">環境チェック</button></li>
+    </ul>
+  </nav>
 </header>
 
 <div class="alerts">
-  <div data-js-state-warning class="alert error" aria-live="assertive"></div>
-  <div data-js-warning-banner class="alert warning" aria-live="assertive"></div>
-</div>
-
-<div class="tabs" role="tablist" aria-label="管理メニュー" data-js-tabs>
-  <button type="button" role="tab" id="tab-dashboard" aria-controls="panel-dashboard" aria-selected="true" tabindex="0" data-js-tab="dashboard">ダッシュボード</button>
-  <button type="button" role="tab" id="tab-groups" aria-controls="panel-groups" aria-selected="false" tabindex="-1" data-js-tab="groups">グループ</button>
-  <button type="button" role="tab" id="tab-routes" aria-controls="panel-routes" aria-selected="false" tabindex="-1" data-js-tab="routes">ルート</button>
-  <button type="button" role="tab" id="tab-domains" aria-controls="panel-domains" aria-selected="false" tabindex="-1" data-js-tab="domains">ベースドメイン</button>
-  <button type="button" role="tab" id="tab-env" aria-controls="panel-env" aria-selected="false" tabindex="-1" data-js-tab="env">環境チェック</button>
+  <div class="alert error" aria-live="assertive"
+       :class="{ visible: $store.app.warning }"
+       x-data x-text="$store.app.warning"></div>
 </div>
 
 <main>
 
   <!-- ダッシュボード -->
-  <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" data-js-tab-panel="dashboard" class="panel active">
+  <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard"
+           class="panel" x-data :class="{ active: $store.app.activeTab === 'dashboard' }">
     <h2 class="visually-hidden">ダッシュボード</h2>
     <section class="card">
       <header>
         <h3>有効なルート一覧</h3>
-        <button type="button" class="btn sm secondary" data-js-scan>スキャン</button>
       </header>
       <div class="body">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">URL</th>
-              <th scope="col">ターゲット</th>
-              <th scope="col">種別</th>
-              <th scope="col">ソース</th>
-            </tr>
-          </thead>
-          <tbody data-js-dashboard-routes></tbody>
-        </table>
+        <template x-if="$store.app.routes.length === 0 && $store.app.groups.length === 0">
+          <p class="empty">ルートが登録されていません</p>
+        </template>
+
+        <!-- 明示ルート -->
+        <template x-for="route in $store.app.routes" :key="route.slug">
+          <div class="entry-block">
+            <header>
+              <span class="status-dot ok"></span>
+              <a :href="'http://' + route.slug + '.' + $store.app.domain"
+                 target="_blank" rel="noopener" class="url"
+                 x-text="route.label || route.slug + '.' + $store.app.domain"></a>
+            </header>
+            <div class="detail">
+              <code x-text="route.target"></code>
+            </div>
+          </div>
+        </template>
+
+        <!-- グループ（アコーディオン） -->
+        <template x-for="group in $store.app.groups" :key="group.slug">
+          <details class="entry-block" open>
+            <summary>
+              <span class="status-dot" :class="group.exists === false ? 'error' : 'ok'"></span>
+              <span class="label" x-text="group.label || group.slug"></span>
+              <template x-if="group.ssl">
+                <span class="badge ssl">SSL</span>
+              </template>
+              <template x-if="group.exists === false">
+                <span class="badge error">パス不存在</span>
+              </template>
+            </summary>
+            <div class="detail">
+              <template x-if="group.subdirs && group.subdirs.length > 0">
+                <div class="subdir-list">
+                  <template x-for="sub in group.subdirs" :key="sub">
+                    <div class="subdir-entry">
+                      <a :href="'http://' + sub + '.' + group.slug + '.' + $store.app.domain"
+                         target="_blank" rel="noopener" class="url"
+                         x-text="sub + '.' + group.slug + '.' + $store.app.domain"></a>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!group.subdirs || group.subdirs.length === 0">
+                <p class="empty">サブディレクトリがありません</p>
+              </template>
+            </div>
+          </details>
+        </template>
       </div>
     </section>
   </section>
 
   <!-- グループ管理 -->
-  <section id="panel-groups" role="tabpanel" aria-labelledby="tab-groups" data-js-tab-panel="groups" class="panel">
+  <section id="panel-groups" role="tabpanel" aria-labelledby="tab-groups"
+           class="panel" x-data="groupPanel()" :class="{ active: $store.app.activeTab === 'groups' }">
     <h2 class="visually-hidden">グループ</h2>
     <section class="card">
       <header>
         <h3>グループの追加</h3>
       </header>
       <div class="body">
-        <form data-js-add-group-form>
-          <div class="group">
-            <label for="group-path">ディレクトリパス</label>
-            <div class="dir-autocomplete">
-              <div class="dir-autocomplete-input-row">
-                <input type="text" id="group-path" name="path" required placeholder="/Users/me/sites/company" autocomplete="off" spellcheck="false">
-                <button type="button" class="dir-autocomplete-dot-toggle" data-js-dot-toggle aria-pressed="false" title="隠しディレクトリを表示">.</button>
+        <form @submit.prevent="addGroup()">
+          <div class="form-row">
+            <div class="group">
+              <label for="group-path">ディレクトリパス</label>
+              <div class="dir-autocomplete" x-data="dirAutocomplete()" x-modelable="value" x-model="path">
+                <div class="dir-autocomplete-input-row">
+                  <input type="text" id="group-path" x-ref="input"
+                         x-model="value"
+                         @input="handleInput()"
+                         @focus="handleFocus()"
+                         @blur="handleBlur()"
+                         @keydown="handleKeydown($event)"
+                         required autocomplete="off" spellcheck="false"
+                         placeholder="/Users/me/sites/company">
+                  <button type="button" class="dir-autocomplete-dot-toggle"
+                          :class="{ active: showDot }"
+                          :aria-pressed="showDot ? 'true' : 'false'"
+                          title="隠しディレクトリを表示"
+                          @click="toggleDot()">.</button>
+                </div>
+                <div class="dir-autocomplete-dropdown" role="listbox" x-ref="dropdown"
+                     :class="{ visible: dropdownVisible }">
+                  <template x-for="(dir, i) in candidates" :key="dir">
+                    <div class="dir-autocomplete-item"
+                         :class="{ active: i === activeIndex }"
+                         @mousedown.prevent="selectCandidate(dir)"
+                         x-text="dir + '/'"></div>
+                  </template>
+                </div>
               </div>
-              <div class="dir-autocomplete-dropdown" role="listbox"></div>
             </div>
           </div>
-          <button type="submit" class="btn primary">追加</button>
+          <div class="form-row">
+            <div class="group">
+              <label>
+                <span>スラグ</span>
+                <input type="text" name="slug" required placeholder="company" x-model="slug">
+              </label>
+            </div>
+            <div class="group">
+              <label>
+                <span>ラベル</span>
+                <input type="text" name="label" placeholder="自社プロジェクト群" x-model="label">
+              </label>
+            </div>
+            <button type="submit" class="btn primary">追加</button>
+          </div>
         </form>
       </div>
     </section>
@@ -79,47 +176,137 @@
     <section class="card">
       <header>
         <h3>登録済みグループ</h3>
-        <button type="button" class="btn sm secondary" data-js-scan>スキャン</button>
       </header>
-      <div class="body" data-js-groups-list></div>
+      <div class="body">
+        <template x-if="$store.app.groups.length === 0">
+          <p class="empty">グループが登録されていません</p>
+        </template>
+
+        <template x-for="(group, index) in $store.app.groups" :key="group.slug">
+          <details class="entry-block" open draggable="true"
+                   @dragstart="handleDragStart($event, index)"
+                   @dragover.prevent="$event.currentTarget.classList.add('drag-over')"
+                   @dragleave="handleDragLeave($event)"
+                   @dragend="handleDragEnd($event)"
+                   @drop.prevent="handleDrop($event, index)">
+            <summary>
+              <span class="handle" aria-hidden="true">&#x2630;</span>
+              <span class="status-dot" :class="group.exists === false ? 'error' : 'ok'"></span>
+              <span class="label" x-text="group.label || group.slug"></span>
+              <template x-if="group.ssl">
+                <span class="badge ssl">SSL</span>
+              </template>
+              <template x-if="!group.exists">
+                <span class="badge error">存在しません</span>
+              </template>
+              <span class="actions">
+                <template x-if="index > 0">
+                  <button type="button" class="btn sm secondary"
+                          @click.stop="moveGroup(index, index - 1)"
+                          :aria-label="group.slug + ' を上へ移動'">&#x2191;</button>
+                </template>
+                <template x-if="index < $store.app.groups.length - 1">
+                  <button type="button" class="btn sm secondary"
+                          @click.stop="moveGroup(index, index + 1)"
+                          :aria-label="group.slug + ' を下へ移動'">&#x2193;</button>
+                </template>
+                <template x-if="!group.ssl">
+                  <button type="button" class="btn sm secondary"
+                          @click.stop="enableGroupSsl(group.slug)">SSL 有効化</button>
+                </template>
+                <button type="button" class="btn sm danger"
+                        @click.stop="deleteGroup(group.slug)">削除</button>
+              </span>
+            </summary>
+            <div class="detail">
+              <p><code x-text="group.path"></code></p>
+              <template x-if="group.subdirs && group.subdirs.length > 0">
+                <div class="subdir-list">
+                  <template x-for="sub in group.subdirs" :key="sub">
+                    <div class="subdir-entry">
+                      <a :href="'http://' + sub + '.' + group.slug + '.' + $store.app.domain"
+                         target="_blank" rel="noopener" class="url"
+                         x-text="sub + '.' + group.slug + '.' + $store.app.domain"></a>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!group.subdirs || group.subdirs.length === 0">
+                <p class="empty">サブディレクトリがありません</p>
+              </template>
+            </div>
+          </details>
+        </template>
+      </div>
     </section>
   </section>
 
   <!-- ルート管理 -->
-  <section id="panel-routes" role="tabpanel" aria-labelledby="tab-routes" data-js-tab-panel="routes" class="panel">
+  <section id="panel-routes" role="tabpanel" aria-labelledby="tab-routes"
+           class="panel" x-data="routePanel()" :class="{ active: $store.app.activeTab === 'routes' }">
     <h2 class="visually-hidden">ルート</h2>
     <section class="card">
       <header>
         <h3>ルートの追加</h3>
       </header>
       <div class="body">
-        <form data-js-add-route-form>
-          <div class="group">
-            <label>
-              <span>スラグ</span>
-              <input type="text" name="slug" required placeholder="myapp">
-            </label>
-          </div>
-          <div class="group">
-            <label for="route-target">ターゲット</label>
-            <div class="dir-autocomplete">
-              <div class="dir-autocomplete-input-row">
-                <input type="text" id="route-target" name="target" required placeholder="/Users/me/sites/myapp" autocomplete="off" spellcheck="false">
-                <button type="button" class="dir-autocomplete-dot-toggle" data-js-dot-toggle aria-pressed="false" title="隠しディレクトリを表示">.</button>
+        <form @submit.prevent="addRoute()">
+          <div class="form-row">
+            <div class="group auto">
+              <label>
+                <span>種別</span>
+                <select name="type" x-model="type" @change="handleTypeChange()">
+                  <option value="directory">ディレクトリ</option>
+                  <option value="proxy">プロキシ</option>
+                </select>
+              </label>
+            </div>
+            <div class="group">
+              <label for="route-target">ターゲット</label>
+              <div class="dir-autocomplete" :class="{ 'autocomplete-disabled': !isDirectory }"
+                   x-data="dirAutocomplete()" x-modelable="value" x-model="target">
+                <div class="dir-autocomplete-input-row">
+                  <input type="text" id="route-target" x-ref="input"
+                         x-model="value"
+                         @input="handleInput()"
+                         @focus="handleFocus()"
+                         @blur="handleBlur()"
+                         @keydown="handleKeydown($event)"
+                         required autocomplete="off" spellcheck="false"
+                         :placeholder="isDirectory ? '/Users/me/sites/myapp' : 'http://localhost:3000'">
+                  <button type="button" class="dir-autocomplete-dot-toggle"
+                          :class="{ active: showDot }"
+                          :aria-pressed="showDot ? 'true' : 'false'"
+                          title="隠しディレクトリを表示"
+                          @click="toggleDot()">.</button>
+                </div>
+                <div class="dir-autocomplete-dropdown" role="listbox" x-ref="dropdown"
+                     :class="{ visible: dropdownVisible }">
+                  <template x-for="(dir, i) in candidates" :key="dir">
+                    <div class="dir-autocomplete-item"
+                         :class="{ active: i === activeIndex }"
+                         @mousedown.prevent="selectCandidate(dir)"
+                         x-text="dir + '/'"></div>
+                  </template>
+                </div>
               </div>
-              <div class="dir-autocomplete-dropdown" role="listbox"></div>
             </div>
           </div>
-          <div class="group auto">
-            <label>
-              <span>種別</span>
-              <select name="type">
-                <option value="directory">ディレクトリ</option>
-                <option value="proxy">プロキシ</option>
-              </select>
-            </label>
+          <div class="form-row">
+            <div class="group">
+              <label>
+                <span>スラグ</span>
+                <input type="text" name="slug" required placeholder="myapp" x-model="slug">
+              </label>
+            </div>
+            <div class="group">
+              <label>
+                <span>ラベル</span>
+                <input type="text" name="label" placeholder="メインアプリ" x-model="label">
+              </label>
+            </div>
+            <button type="submit" class="btn primary">追加</button>
           </div>
-          <button type="submit" class="btn primary">追加</button>
         </form>
       </div>
     </section>
@@ -129,34 +316,43 @@
         <h3>登録済みルート</h3>
       </header>
       <div class="body">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">スラグ</th>
-              <th scope="col">ターゲット</th>
-              <th scope="col">種別</th>
-              <th scope="col"><span class="visually-hidden">操作</span></th>
-            </tr>
-          </thead>
-          <tbody data-js-routes-list></tbody>
-        </table>
+        <template x-if="$store.app.routes.length === 0">
+          <p class="empty">ルートが登録されていません</p>
+        </template>
+        <template x-for="route in $store.app.routes" :key="route.slug">
+          <div class="entry-block">
+            <header>
+              <span class="status-dot ok"></span>
+              <a :href="'http://' + route.slug + '.' + $store.app.domain"
+                 target="_blank" rel="noopener" class="url"
+                 x-text="route.label || route.slug + '.' + $store.app.domain"></a>
+              <div class="actions">
+                <button type="button" class="btn sm danger" @click="deleteRoute(route.slug)">削除</button>
+              </div>
+            </header>
+            <div class="detail">
+              <code x-text="route.target"></code>
+            </div>
+          </div>
+        </template>
       </div>
     </section>
   </section>
 
   <!-- ベースドメイン -->
-  <section id="panel-domains" role="tabpanel" aria-labelledby="tab-domains" data-js-tab-panel="domains" class="panel">
+  <section id="panel-domains" role="tabpanel" aria-labelledby="tab-domains"
+           class="panel" x-data="domainPanel()" :class="{ active: $store.app.activeTab === 'domains' }">
     <h2 class="visually-hidden">ベースドメイン</h2>
     <section class="card">
       <header>
         <h3>ベースドメインの追加</h3>
       </header>
       <div class="body">
-        <form data-js-add-domain-form>
+        <form @submit.prevent="addDomain()">
           <div class="group">
             <label>
               <span>ドメイン</span>
-              <input type="text" name="domain" required placeholder="dev.local">
+              <input type="text" name="domain" required placeholder="dev.local" x-model="domain">
             </label>
           </div>
           <button type="submit" class="btn primary">追加</button>
@@ -176,28 +372,98 @@
               <th scope="col"><span class="visually-hidden">操作</span></th>
             </tr>
           </thead>
-          <tbody data-js-domains-list></tbody>
+          <tbody>
+            <template x-if="$store.app.baseDomains.length === 0">
+              <tr><td colspan="2" class="empty">ベースドメインが登録されていません</td></tr>
+            </template>
+            <template x-for="bd in $store.app.baseDomains" :key="bd.domain">
+              <tr>
+                <td>
+                  <span x-text="bd.domain"></span>
+                  <template x-if="bd.current">
+                    <span class="badge current">current</span>
+                  </template>
+                  <template x-if="bd.ssl">
+                    <span class="badge ssl">SSL</span>
+                  </template>
+                </td>
+                <td class="actions">
+                  <div class="actions">
+                    <template x-if="!bd.ssl">
+                      <button type="button" class="btn sm secondary"
+                              @click="enableSsl(bd.domain)">SSL 有効化</button>
+                    </template>
+                    <template x-if="!bd.current">
+                      <button type="button" class="btn sm secondary"
+                              @click="setCurrent(bd.domain)">current に設定</button>
+                    </template>
+                    <template x-if="!bd.current">
+                      <button type="button" class="btn sm danger"
+                              @click="deleteDomain(bd.domain)">削除</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
         </table>
       </div>
     </section>
   </section>
 
   <!-- 環境チェック -->
-  <section id="panel-env" role="tabpanel" aria-labelledby="tab-env" data-js-tab-panel="env" class="panel">
+  <section id="panel-env" role="tabpanel" aria-labelledby="tab-env"
+           class="panel" x-data="envPanel()" :class="{ active: $store.app.activeTab === 'env' }">
     <h2 class="visually-hidden">環境チェック</h2>
     <section class="card">
       <header>
         <h3>環境チェック</h3>
       </header>
-      <div class="body" data-js-env-checks>
-        <p class="empty">タブを選択すると読み込みます</p>
+      <div class="body">
+        <template x-if="!loaded && !loading">
+          <p class="empty">タブを選択すると読み込みます</p>
+        </template>
+
+        <template x-if="loading">
+          <p class="empty">読み込み中...</p>
+        </template>
+
+        <template x-if="error">
+          <p class="empty" x-text="'環境チェックに失敗しました: ' + error"></p>
+        </template>
+
+        <template x-if="loaded && !error">
+          <div>
+            <template x-for="s in sections" :key="s.key">
+              <template x-if="grouped[s.key]?.length > 0">
+                <div>
+                  <p class="checks-label" x-text="s.label"></p>
+                  <ul class="checks">
+                    <template x-for="check in grouped[s.key]" :key="check.name">
+                      <li>
+                        <span class="icon" :style="'color:' + statusColor(check.status)"
+                              x-text="statusIcon(check.status)"></span>
+                        <span class="name" x-text="check.name"></span>
+                        <template x-if="check.command">
+                          <span class="command" x-text="check.command"></span>
+                        </template>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </template>
+            </template>
+          </div>
+        </template>
       </div>
     </section>
   </section>
 
 </main>
 
-<div data-js-toast class="toast" role="status"></div>
+<div class="toast" role="status" x-data
+     :class="{ visible: $store.app.toast.visible }"
+     x-text="$store.app.toast.message"></div>
 
 </body>
 </html>

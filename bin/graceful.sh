@@ -2,6 +2,7 @@
 # Apache graceful restart ラッパー
 # sudoers からこのスクリプトのみ許可することで権限を最小化する。
 # conf/env.conf は setup.sh が生成する。
+# 安全のため source せず、許可キーのみを抽出してパースする。
 
 set -uo pipefail
 
@@ -13,7 +14,8 @@ if [[ ! -f "${ENV_CONF}" ]]; then
     exit 1
 fi
 
-source "${ENV_CONF}"
+# env.conf を source せず、許可キーのみを安全に抽出する
+HTTPD_BIN=$(grep -E '^HTTPD_BIN=' "${ENV_CONF}" | head -1 | cut -d= -f2-)
 
 if [[ -z "${HTTPD_BIN:-}" ]]; then
     echo "エラー: HTTPD_BIN が設定されていません。setup.sh を再実行してください。" >&2

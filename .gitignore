@@ -1,3 +1,9 @@
 data/routes.json.bak
+data/.last-restart
+data/.restart-pending
+data/logs/
 ssl/*.pem
 .mcp.json
+.claude/rules/
+vendor/
+composer.lock

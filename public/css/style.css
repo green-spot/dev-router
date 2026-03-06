@@ -49,14 +49,54 @@ body {
 body > header {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  padding: 0.75rem 1.5rem;
+  padding: 0 1.5rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 1.5rem;
 
   > h1 {
     font-size: 1.1rem;
-    font-weight: 600;
+    font-weight: normal;
+    white-space: nowrap;
+
+    > a {
+      display: block;
+      padding: 0.75rem 0;
+      border-bottom: 2px solid transparent;
+      color: inherit;
+      text-decoration: none;
+    }
+  }
+
+  > nav {
+
+    > ul {
+      display: flex;
+      list-style: none;
+      gap: 0;
+
+      > li > button {
+        padding: 0.75rem 1.25rem;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: var(--color-text-muted);
+        border-bottom: 2px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+
+        &:hover {
+          color: var(--color-text);
+        }
+
+        &[aria-selected="true"] {
+          color: var(--color-primary);
+          border-bottom-color: var(--color-primary);
+          font-weight: 500;
+        }
+      }
+    }
   }
 }
 
@@ -88,38 +128,6 @@ body > header {
     background: var(--color-error-bg);
     border: 1px solid var(--color-error-border);
     color: var(--color-error-text);
-  }
-}
-
-/* ===================
-   タブナビゲーション
-=================== */
-.tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 1.5rem;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-
-  > button {
-    padding: 0.75rem 1.25rem;
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: var(--color-text-muted);
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-
-    &:hover {
-      color: var(--color-text);
-    }
-
-    &[aria-selected="true"] {
-      color: var(--color-primary);
-      border-bottom-color: var(--color-primary);
-      font-weight: 500;
-    }
   }
 }
 
@@ -173,17 +181,25 @@ main {
 
   form {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     margin-bottom: 0.75rem;
     align-items: end;
   }
 }
 
+form > .form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+  flex: 1 1 100%;
+}
+
 /* ===================
    フォーム
 =================== */
 
-form > .group {
+:is(form, .form-row) > .group {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -354,26 +370,6 @@ table {
   }
 }
 
-.copy {
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  padding: 0.15rem 0.4rem;
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-left: 0.25rem;
-
-  &:hover {
-    background: var(--color-muted-bg);
-  }
-
-  &.copied {
-    color: var(--color-success);
-    border-color: var(--color-success);
-  }
-}
-
 /* ===================
    環境チェック
 =================== */
@@ -457,19 +453,116 @@ table {
 }
 
 /* ===================
-   グループ内サブディレクトリ
+   エントリブロック
 =================== */
-.subdirs {
-  list-style: none;
-  margin-top: 0.5rem;
-  padding-left: 1rem;
-  font-size: 0.85rem;
+.entry-block {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  transition: background 0.15s;
 
-  > li {
+  &:hover {
+    background: var(--color-bg);
+  }
+
+  > header,
+  > summary {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.2rem 0;
+
+    > .url,
+    > .label {
+      flex: 1;
+    }
+
+    > .actions {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+  }
+
+  &:hover > header > .actions,
+  &:hover > summary > .actions,
+  > header > .actions:focus-within,
+  > summary > .actions:focus-within {
+    opacity: 1;
+  }
+
+  > .detail {
+    padding-left: 1.25rem;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+
+    > .subdir-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+
+      > .subdir-entry {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+    }
+  }
+
+  &[open] > .detail {
+    margin-top: 0.5rem;
+  }
+
+  > summary {
+    list-style: none;
+    cursor: pointer;
+
+    &::marker,
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  &.drag-over {
+    background: var(--color-drag-over);
+  }
+}
+
+/* ===================
+   ステータスドット
+=================== */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.ok {
+    background: var(--color-success);
+  }
+
+  &.error {
+    background: var(--color-danger);
+  }
+
+  &.muted {
+    background: var(--color-text-muted);
+  }
+}
+
+@media (max-width: 768px) {
+  .entry-block {
+
+    > header > .actions,
+    > summary > .actions {
+      opacity: 1;
+    }
   }
 }
 

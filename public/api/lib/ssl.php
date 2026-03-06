@@ -3,60 +3,82 @@
  * SSL 管理用ヘルパー
  */
 
+function findMkcert(): ?string {
+  // Apache の PHP 環境では PATH が制限されているため、一般的なパスを補完して検索する
+  $basePath = getenv("PATH") ?: "/usr/bin:/bin";
+  $extraDirs = "/opt/homebrew/bin:/usr/local/bin:/usr/local/go/bin";
+  $fullPath = "{$extraDirs}:{$basePath}";
+
+  exec("PATH=" . escapeshellarg($fullPath) . " which mkcert 2>/dev/null", $output, $exitCode);
+  if($exitCode === 0 && !empty($output[0])) {
+    return trim($output[0]);
+  }
+
+  return null;
+}
+
 function checkMkcertStatus(): array {
-  exec("which mkcert 2>/dev/null", $output, $exitCode);
-  $installed = ($exitCode === 0);
+  $mkcertPath = findMkcert();
+  $installed = ($mkcertPath !== null);
 
   $caInstalled = false;
   if($installed) {
-    exec("mkcert -CAROOT 2>/dev/null", $carootOutput, $carootExit);
+    exec(escapeshellarg($mkcertPath) . " -CAROOT 2>/dev/null", $carootOutput, $carootExit);
     if($carootExit === 0 && !empty($carootOutput[0])) {
-      $caInstalled = file_exists(trim($carootOutput[0]) . "/rootCA.pem");
+      $caroot = trim($carootOutput[0]);
+      // パストラバーサル防止: 絶対パスかつ実在ディレクトリのみ許可
+      if(str_starts_with($caroot, "/") && is_dir($caroot)) {
+        $caInstalled = file_exists($caroot . "/rootCA.pem");
+      }
     }
   }
 
   return ["installed" => $installed, "caInstalled" => $caInstalled];
 }
 
+/**
+ * 全 SANs（Subject Alternative Names）を収集する。
+ *
+ * - baseDomains.ssl=true → *.basedomain（明示ルート用）
+ * - groups.ssl=true → *.group.basedomain（グループ用、全ドメイン分）
+ *
+ * @param array $state routes.json の状態
+ * @return array SANs の配列
+ */
+function collectAllSans(array $state): array {
+  $sans = [];
+
+  foreach($state["baseDomains"] as $bd) {
+    if(!empty($bd["ssl"])) {
+      $sans[] = "*." . $bd["domain"];
+    }
+  }
+
+  $allDomains = array_column($state["baseDomains"], "domain");
+  foreach($state["groups"] as $group) {
+    if(!empty($group["ssl"])) {
+      foreach($allDomains as $domain) {
+        $sans[] = "*.{$group["slug"]}.{$domain}";
+      }
+    }
+  }
+
+  return $sans;
+}
+
 function deployHttpsVhost(): bool {
-  $os = PHP_OS_FAMILY === "Darwin" ? "macos" : "linux";
   $templatePath = ROUTER_HOME . "/conf/vhost-https.conf.template";
+  $targetPath   = ROUTER_HOME . "/conf/vhost-https.conf";
 
   if(!file_exists($templatePath)) {
     return false;
   }
 
-  $config = str_replace("\${ROUTER_HOME}", ROUTER_HOME, file_get_contents($templatePath));
-
-  if($os === "macos") {
-    foreach(["/opt/homebrew/etc/httpd/extra", "/usr/local/etc/httpd/extra"] as $dir) {
-      if(!is_dir($dir)) continue;
-      $target = "{$dir}/dev-router-ssl.conf";
-      $isNew = !file_exists($target);
-      file_put_contents($target, $config);
-      if($isNew) {
-        $httpdConf = dirname($dir) . "/httpd.conf";
-        if(file_exists($httpdConf) && !str_contains(file_get_contents($httpdConf), "dev-router-ssl.conf")) {
-          file_put_contents($httpdConf, "\n# DevRouter SSL\nInclude {$target}\n", FILE_APPEND);
-        }
-      }
-      return $isNew;
-    }
-  } else {
-    $targets = [
-      "/etc/apache2/sites-available/dev-router-ssl.conf",
-      "/etc/httpd/conf.d/dev-router-ssl.conf",
-    ];
-    foreach($targets as $target) {
-      if(!is_dir(dirname($target))) continue;
-      $isNew = !file_exists($target);
-      file_put_contents($target, $config);
-      if($isNew && str_contains($target, "sites-available")) {
-        exec("a2ensite dev-router-ssl.conf 2>/dev/null");
-      }
-      return $isNew;
-    }
+  $template = file_get_contents($templatePath);
+  if($template === false) {
+    return false;
   }
 
-  return false;
+  $config = str_replace('${ROUTER_HOME}', ROUTER_HOME, $template);
+  return file_put_contents($targetPath, $config) !== false;
 }
